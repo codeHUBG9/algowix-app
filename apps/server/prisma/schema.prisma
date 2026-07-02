@@ -1,0 +1,464 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+  schemas  = ["platform", "billing", "audit", "developer", "files"]
+}
+
+// ============================================================
+// ORGANIZATIONS & STRUCTURE
+// ============================================================
+
+model Organization {
+  id             String    @id @default(uuid()) @db.UniqueIdentifier
+  slug           String    @unique @db.NVarChar(100)
+  name           String    @db.NVarChar(255)
+  logoUrl        String?   @db.NVarChar(500)
+  industry       String?   @db.NVarChar(100)
+  size           String?   @db.NVarChar(20)
+  country        String    @db.NChar(2)
+  currency       String    @default("INR") @db.NChar(3)
+  timezone       String    @default("Asia/Kolkata") @db.NVarChar(50)
+  billingEmail   String    @db.NVarChar(255)
+  taxId          String?   @db.NVarChar(50)
+  taxType        String?   @db.NVarChar(20)
+  status         String    @default("ACTIVE") @db.NVarChar(20)
+  plan           String    @default("STARTER") @db.NVarChar(20)
+  trialEndsAt    DateTime?
+  settings       String?   @db.NVarChar(Max)
+  metadata       String?   @db.NVarChar(Max)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  memberships    OrgMembership[]
+  invites        OrgInvite[]
+  subscriptions  Subscription[]
+  auditLogs      AuditLog[]
+  notifications  Notification[]
+  apiKeys        ApiKey[]
+  webhooks       Webhook[]
+  files          FileRecord[]
+
+  @@map("Organizations")
+  @@schema("platform")
+}
+
+// ============================================================
+// USERS & IDENTITY
+// ============================================================
+
+model User {
+  id                 String     @id @default(uuid()) @db.UniqueIdentifier
+  email              String     @unique @db.NVarChar(255)
+  emailVerified      Boolean    @default(false)
+  emailVerifiedAt    DateTime?
+  passwordHash       String?    @db.NVarChar(255)
+  firstName          String     @db.NVarChar(100)
+  lastName           String     @db.NVarChar(100)
+  displayName        String?    @db.NVarChar(200)
+  avatarUrl          String?    @db.NVarChar(500)
+  phone              String?    @db.NVarChar(20)
+  phoneVerified      Boolean    @default(false)
+  language           String     @default("en") @db.NVarChar(10)
+  timezone           String     @default("Asia/Kolkata") @db.NVarChar(50)
+  twoFactorEnabled   Boolean    @default(false)
+  twoFactorMethod    String?    @db.NVarChar(10)
+  twoFactorSecret    String?    @db.NVarChar(255)
+  backupCodes        String?    @db.NVarChar(Max)
+  status             String     @default("ACTIVE") @db.NVarChar(20)
+  loginAttempts      Int        @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  lastLoginIp        String?    @db.NVarChar(45)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  deletedAt          DateTime?
+
+  memberships        OrgMembership[]
+  sessions           Session[]
+  emailVerifications EmailVerification[]
+  passwordResets     PasswordReset[]
+  notifications      Notification[]
+  sentInvites        OrgInvite[] @relation("InvitedBy")
+
+  @@map("Users")
+  @@schema("platform")
+}
+
+model OrgMembership {
+  id             String       @id @default(uuid()) @db.UniqueIdentifier
+  userId         String       @db.UniqueIdentifier
+  organizationId String       @db.UniqueIdentifier
+  roleId         String       @db.UniqueIdentifier
+  status         String       @default("ACTIVE") @db.NVarChar(20)
+  isPrimary      Boolean      @default(false)
+  joinedAt       DateTime     @default(now())
+  invitedBy      String?      @db.UniqueIdentifier
+  invitedAt      DateTime?
+  updatedAt      DateTime     @updatedAt
+
+  user           User         @relation(fields: [userId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  role           Role         @relation(fields: [roleId], references: [id])
+
+  @@unique([userId, organizationId])
+  @@map("OrgMemberships")
+  @@schema("platform")
+}
+
+model OrgInvite {
+  id             String       @id @default(uuid()) @db.UniqueIdentifier
+  organizationId String       @db.UniqueIdentifier
+  email          String       @db.NVarChar(255)
+  roleId         String       @db.UniqueIdentifier
+  token          String       @unique @db.NVarChar(255)
+  status         String       @default("PENDING") @db.NVarChar(20)
+  expiresAt      DateTime
+  invitedById    String       @db.UniqueIdentifier
+  acceptedAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  invitedBy      User         @relation("InvitedBy", fields: [invitedById], references: [id])
+
+  @@map("OrgInvites")
+  @@schema("platform")
+}
+
+model Session {
+  id             String    @id @default(uuid()) @db.UniqueIdentifier
+  userId         String    @db.UniqueIdentifier
+  organizationId String?   @db.UniqueIdentifier
+  refreshTokenHash String  @unique @db.NVarChar(255)
+  userAgent      String?   @db.NVarChar(500)
+  ipAddress      String?   @db.NVarChar(45)
+  deviceType     String?   @db.NVarChar(50)
+  deviceName     String?   @db.NVarChar(100)
+  lastActiveAt   DateTime  @default(now())
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  replacedByHash String?   @db.NVarChar(255)
+  createdAt      DateTime  @default(now())
+
+  user           User @relation(fields: [userId], references: [id])
+
+  @@map("Sessions")
+  @@schema("platform")
+}
+
+model EmailVerification {
+  id        String    @id @default(uuid()) @db.UniqueIdentifier
+  userId    String    @db.UniqueIdentifier
+  token     String    @unique @db.NVarChar(255)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user      User @relation(fields: [userId], references: [id])
+
+  @@map("EmailVerifications")
+  @@schema("platform")
+}
+
+model PasswordReset {
+  id        String    @id @default(uuid()) @db.UniqueIdentifier
+  userId    String    @db.UniqueIdentifier
+  token     String    @unique @db.NVarChar(255)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user      User @relation(fields: [userId], references: [id])
+
+  @@map("PasswordResets")
+  @@schema("platform")
+}
+
+// ============================================================
+// RBAC — ROLES, PERMISSIONS
+// ============================================================
+
+model Role {
+  id             String   @id @default(uuid()) @db.UniqueIdentifier
+  organizationId String?  @db.UniqueIdentifier
+  name           String   @db.NVarChar(100)
+  description    String?  @db.NVarChar(500)
+  isSystem       Boolean  @default(false)
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  memberships    OrgMembership[]
+  permissions    RolePermission[]
+
+  @@unique([organizationId, name])
+  @@map("Roles")
+  @@schema("platform")
+}
+
+model Permission {
+  id          String   @id @default(uuid()) @db.UniqueIdentifier
+  resource    String   @db.NVarChar(100)
+  action      String   @db.NVarChar(100)
+  scope       String   @db.NVarChar(50)
+  description String?  @db.NVarChar(500)
+  createdAt   DateTime @default(now())
+
+  roles       RolePermission[]
+
+  @@unique([resource, action, scope])
+  @@map("Permissions")
+  @@schema("platform")
+}
+
+model RolePermission {
+  roleId       String @db.UniqueIdentifier
+  permissionId String @db.UniqueIdentifier
+
+  role         Role       @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+  @@map("RolePermissions")
+  @@schema("platform")
+}
+
+// ============================================================
+// PRODUCTS & SUBSCRIPTIONS
+// ============================================================
+
+model Product {
+  id              String   @id @default(uuid()) @db.UniqueIdentifier
+  slug            String   @unique @db.NVarChar(50)
+  name            String   @db.NVarChar(100)
+  description     String?  @db.NVarChar(1000)
+  shortDescription String? @db.NVarChar(200)
+  logoUrl         String?  @db.NVarChar(500)
+  baseUrl         String   @db.NVarChar(500)
+  contractApiPath String   @default("/api/platform") @db.NVarChar(100)
+  category        String   @db.NVarChar(100)
+  isActive        Boolean  @default(true)
+  isPublic        Boolean  @default(true)
+  isBeta          Boolean  @default(false)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  plans           ProductPlan[]
+  subscriptions   Subscription[]
+
+  @@map("Products")
+  @@schema("platform")
+}
+
+model ProductPlan {
+  id             String   @id @default(uuid()) @db.UniqueIdentifier
+  productId      String   @db.UniqueIdentifier
+  name           String   @db.NVarChar(100)
+  slug           String   @db.NVarChar(100)
+  description    String?  @db.NVarChar(500)
+  monthlyPrice   Decimal  @db.Decimal(10, 2)
+  annualPrice    Decimal? @db.Decimal(10, 2)
+  currency       String   @default("INR") @db.NChar(3)
+  trialDays      Int      @default(14)
+  isActive       Boolean  @default(true)
+  maxSeats       Int?
+  features       String   @db.NVarChar(Max)
+  limits         String   @db.NVarChar(Max)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  product        Product        @relation(fields: [productId], references: [id])
+  subscriptions  Subscription[]
+
+  @@unique([productId, slug])
+  @@map("ProductPlans")
+  @@schema("platform")
+}
+
+model Subscription {
+  id                 String             @id @default(uuid()) @db.UniqueIdentifier
+  organizationId     String             @db.UniqueIdentifier
+  productId          String             @db.UniqueIdentifier
+  planId             String             @db.UniqueIdentifier
+  status             String             @default("TRIALING") @db.NVarChar(20)
+  seatCount          Int                @default(1)
+  billingCycle       String             @default("MONTHLY") @db.NVarChar(20)
+  trialStartsAt      DateTime?
+  trialEndsAt        DateTime?
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd  Boolean            @default(false)
+  cancelledAt        DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  organization       Organization @relation(fields: [organizationId], references: [id])
+  product            Product      @relation(fields: [productId], references: [id])
+  plan               ProductPlan  @relation(fields: [planId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([organizationId, productId])
+  @@map("Subscriptions")
+  @@schema("platform")
+}
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+
+model Notification {
+  id             String              @id @default(uuid()) @db.UniqueIdentifier
+  organizationId String              @db.UniqueIdentifier
+  userId         String              @db.UniqueIdentifier
+  type           String              @db.NVarChar(100)
+  title          String              @db.NVarChar(255)
+  body           String              @db.NVarChar(1000)
+  actionUrl      String?             @db.NVarChar(500)
+  isRead         Boolean             @default(false)
+  readAt         DateTime?
+  channel        String              @default("IN_APP") @db.NVarChar(20)
+  createdAt      DateTime            @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  user           User         @relation(fields: [userId], references: [id])
+
+  @@map("Notifications")
+  @@schema("platform")
+}
+
+// ============================================================
+// AUDIT LOGS
+// ============================================================
+
+model AuditLog {
+  id             String        @id @default(uuid()) @db.UniqueIdentifier
+  organizationId String        @db.UniqueIdentifier
+  actorId        String?       @db.UniqueIdentifier
+  actorType      String        @db.NVarChar(50)
+  actorEmail     String?       @db.NVarChar(255)
+  action         String        @db.NVarChar(200)
+  resource       String        @db.NVarChar(100)
+  resourceId     String?       @db.NVarChar(255)
+  ipAddress      String?       @db.NVarChar(45)
+  userAgent      String?       @db.NVarChar(500)
+  before         String?       @db.NVarChar(Max)
+  after          String?       @db.NVarChar(Max)
+  severity       String        @default("INFO") @db.NVarChar(20)
+  createdAt      DateTime      @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("AuditLogs")
+  @@schema("audit")
+}
+
+// ============================================================
+// DEVELOPER — API KEYS & WEBHOOKS
+// ============================================================
+
+model ApiKey {
+  id             String    @id @default(uuid()) @db.UniqueIdentifier
+  organizationId String    @db.UniqueIdentifier
+  name           String    @db.NVarChar(100)
+  keyHash        String    @unique @db.NVarChar(255)
+  keyPrefix      String    @db.NVarChar(10)
+  scopes         String    @db.NVarChar(Max)
+  lastUsedAt     DateTime?
+  expiresAt      DateTime?
+  isActive       Boolean   @default(true)
+  createdById    String    @db.UniqueIdentifier
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("ApiKeys")
+  @@schema("developer")
+}
+
+model Webhook {
+  id              String    @id @default(uuid()) @db.UniqueIdentifier
+  organizationId  String    @db.UniqueIdentifier
+  name            String    @db.NVarChar(100)
+  url             String    @db.NVarChar(500)
+  secret          String    @db.NVarChar(255)
+  events          String    @db.NVarChar(Max)
+  isActive        Boolean   @default(true)
+  lastTriggeredAt DateTime?
+  failureCount    Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization    Organization      @relation(fields: [organizationId], references: [id])
+  deliveries      WebhookDelivery[]
+
+  @@map("Webhooks")
+  @@schema("developer")
+}
+
+model WebhookDelivery {
+  id          String    @id @default(uuid()) @db.UniqueIdentifier
+  webhookId   String    @db.UniqueIdentifier
+  eventType   String    @db.NVarChar(100)
+  payload     String    @db.NVarChar(Max)
+  statusCode  Int?
+  response    String?   @db.NVarChar(2000)
+  attempt     Int       @default(1)
+  success     Boolean   @default(false)
+  deliveredAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  webhook     Webhook @relation(fields: [webhookId], references: [id])
+
+  @@map("WebhookDeliveries")
+  @@schema("developer")
+}
+
+// ============================================================
+// FILES
+// ============================================================
+
+model FileRecord {
+  id             String    @id @default(uuid()) @db.UniqueIdentifier
+  organizationId String    @db.UniqueIdentifier
+  uploadedById   String    @db.UniqueIdentifier
+  filename       String    @db.NVarChar(255)
+  originalName   String    @db.NVarChar(255)
+  mimeType       String    @db.NVarChar(100)
+  sizeBytes      BigInt
+  blobUrl        String    @db.NVarChar(500)
+  cdnUrl         String?   @db.NVarChar(500)
+  folder         String?   @db.NVarChar(255)
+  isPublic       Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime?
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("Files")
+  @@schema("files")
+}
+
+// ============================================================
+// ENUM-LIKE STRING FIELDS
+// ============================================================
+// SQL Server has no native enum type, so Prisma enums are unsupported
+// for this connector. Enumerated values are validated by shared Zod
+// schemas/TS union types at the application layer instead:
+//   Organization.size      -> MICRO | SMALL | MEDIUM | LARGE | ENTERPRISE
+//   Organization.status    -> ACTIVE | SUSPENDED | CANCELLED | PENDING
+//   Organization.plan      -> STARTER | GROWTH | BUSINESS | ENTERPRISE
+//   User.status            -> ACTIVE | INACTIVE | LOCKED
+//   User.twoFactorMethod   -> TOTP | SMS | EMAIL
+//   OrgMembership.status   -> ACTIVE | INVITED | SUSPENDED
+//   OrgInvite.status       -> PENDING | ACCEPTED | EXPIRED | CANCELLED
+//   Subscription.status    -> TRIALING | ACTIVE | PAST_DUE | CANCELLED | PAUSED | INCOMPLETE
+//   Subscription.billingCycle -> MONTHLY | ANNUAL
+//   Notification.channel  -> IN_APP | EMAIL | SMS | PUSH
+//   AuditLog.severity      -> INFO | WARNING | CRITICAL

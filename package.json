@@ -1,0 +1,28 @@
+{
+  "name": "algowix-platform",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "db:migrate": "pnpm --filter @algowix/server prisma:migrate",
+    "db:generate": "pnpm --filter @algowix/server prisma:generate",
+    "db:seed": "pnpm --filter @algowix/server prisma:seed",
+    "db:studio": "pnpm --filter @algowix/server prisma:studio"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  }
+}
