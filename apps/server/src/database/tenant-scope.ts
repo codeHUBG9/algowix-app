@@ -8,8 +8,8 @@ import { prisma } from "./prisma.js";
 // a `where: { organizationId }` clause.
 //
 // Only models that actually exist in this schema and belong to a single
-// tenant are listed. Branch/Department/Team from the doc's example don't
-// exist yet — they land with 08-Organization-Management.md.
+// tenant are listed. TeamMember is scoped indirectly via its parent Team
+// (it has no organizationId column of its own), so it's deliberately absent.
 const TENANT_SCOPED_MODELS = new Set([
   "OrgMembership",
   "OrgInvite",
@@ -19,6 +19,9 @@ const TENANT_SCOPED_MODELS = new Set([
   "ApiKey",
   "Webhook",
   "FileRecord",
+  "Branch",
+  "Department",
+  "Team",
 ]);
 
 const READ_AND_BULK_WRITE_OPS = new Set(["findMany", "findFirst", "count", "updateMany", "deleteMany"]);

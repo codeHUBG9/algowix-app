@@ -8,9 +8,18 @@ export interface Tenant {
   id: string;
   slug: string;
   name: string;
+  legalName: string | null;
   logoUrl: string | null;
   industry: string | null;
   size: string | null;
+  foundedYear: number | null;
+  website: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  pincode: string | null;
   country: string;
   currency: string;
   timezone: string;

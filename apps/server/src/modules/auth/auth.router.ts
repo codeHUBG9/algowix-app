@@ -15,6 +15,11 @@ authRouter.post("/logout", asyncHandler(authController.logout));
 authRouter.get("/me", authenticate, asyncHandler(authController.me));
 authRouter.get("/sessions", authenticate, asyncHandler(authController.sessions));
 
+// Multi-organization support — 08-Organization-Management.md §9
+authRouter.get("/my-organizations", authenticate, asyncHandler(authController.myOrganizations));
+authRouter.post("/switch-organization", authenticate, asyncHandler(authController.switchOrganization));
+authRouter.post("/primary-organization", authenticate, asyncHandler(authController.setPrimaryOrganization));
+
 // Dev/test-only backdoor for .http request collections and the E2E suite —
 // there's no email provider wired up (06-Authentication.md defers it), so
 // this is how anything outside a human reading server stdout gets the

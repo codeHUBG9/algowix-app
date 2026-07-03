@@ -29,6 +29,24 @@ export const authRepository = {
     });
   },
 
+  listMembershipsForUser(userId: string) {
+    return prisma.orgMembership.findMany({
+      where: { userId, status: "ACTIVE" },
+      include: { organization: true, role: { select: { name: true } } },
+      orderBy: { isPrimary: "desc" },
+    });
+  },
+
+  async setPrimaryMembership(userId: string, organizationId: string): Promise<void> {
+    await prisma.$transaction([
+      prisma.orgMembership.updateMany({ where: { userId, isPrimary: true }, data: { isPrimary: false } }),
+      prisma.orgMembership.update({
+        where: { userId_organizationId: { userId, organizationId } },
+        data: { isPrimary: true },
+      }),
+    ]);
+  },
+
   findPrimaryMembership(userId: string) {
     return prisma.orgMembership.findFirst({
       where: { userId, status: "ACTIVE" },

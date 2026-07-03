@@ -17,10 +17,19 @@ model Organization {
   id                   String    @id @default(uuid()) @db.UniqueIdentifier
   slug                 String    @unique @db.NVarChar(100)
   name                 String    @db.NVarChar(255)
+  legalName            String?   @db.NVarChar(255)
   logoUrl              String?   @db.NVarChar(500)
   industry             String?   @db.NVarChar(100)
   size                 String?   @db.NVarChar(20)
+  foundedYear          Int?
+  website              String?   @db.NVarChar(255)
+  phone                String?   @db.NVarChar(20)
+  email                String?   @db.NVarChar(255)
+  address              String?   @db.NVarChar(500)
+  city                 String?   @db.NVarChar(100)
+  state                String?   @db.NVarChar(100)
   country              String    @db.NChar(2)
+  pincode              String?   @db.NVarChar(20)
   currency             String    @default("INR") @db.NChar(3)
   timezone             String    @default("Asia/Kolkata") @db.NVarChar(50)
   billingEmail         String    @db.NVarChar(255)
@@ -29,6 +38,8 @@ model Organization {
   status               String    @default("PENDING") @db.NVarChar(20)
   plan                 String    @default("STARTER") @db.NVarChar(20)
   tenancyType          String    @default("SHARED") @db.NVarChar(20)
+  language             String    @default("en") @db.NVarChar(10)
+  dateFormat           String    @default("DD/MM/YYYY") @db.NVarChar(20)
   trialEndsAt          DateTime?
   suspendedAt          DateTime?
   suspendReason        String?   @db.NVarChar(500)
@@ -50,8 +61,87 @@ model Organization {
   apiKeys       ApiKey[]
   webhooks      Webhook[]
   files         FileRecord[]
+  branches      Branch[]
+  departments   Department[]
+  teams         Team[]
 
   @@map("Organizations")
+  @@schema("platform")
+}
+
+// ============================================================
+// ORGANIZATION STRUCTURE — BRANCHES, DEPARTMENTS, TEAMS
+// ============================================================
+
+model Branch {
+  id             String    @id @default(uuid()) @db.UniqueIdentifier
+  organizationId String    @db.UniqueIdentifier
+  name           String    @db.NVarChar(255)
+  code           String?   @db.NVarChar(50)
+  address        String?   @db.NVarChar(500)
+  city           String?   @db.NVarChar(100)
+  state          String?   @db.NVarChar(100)
+  country        String?   @db.NVarChar(100)
+  pincode        String?   @db.NVarChar(20)
+  phone          String?   @db.NVarChar(20)
+  isHeadOffice   Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("Branches")
+  @@schema("platform")
+}
+
+model Department {
+  id             String    @id @default(uuid()) @db.UniqueIdentifier
+  organizationId String    @db.UniqueIdentifier
+  name           String    @db.NVarChar(255)
+  code           String?   @db.NVarChar(50)
+  parentId       String?   @db.UniqueIdentifier
+  headUserId     String?   @db.UniqueIdentifier
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  parent       Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children     Department[] @relation("DepartmentHierarchy")
+
+  @@map("Departments")
+  @@schema("platform")
+}
+
+model Team {
+  id             String    @id @default(uuid()) @db.UniqueIdentifier
+  organizationId String    @db.UniqueIdentifier
+  name           String    @db.NVarChar(255)
+  description    String?   @db.NVarChar(1000)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  members      TeamMember[]
+
+  @@map("Teams")
+  @@schema("platform")
+}
+
+model TeamMember {
+  id       String   @id @default(uuid()) @db.UniqueIdentifier
+  teamId   String   @db.UniqueIdentifier
+  userId   String   @db.UniqueIdentifier
+  role     String   @default("MEMBER") @db.NVarChar(20)
+  joinedAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([teamId, userId])
+  @@map("TeamMembers")
   @@schema("platform")
 }
 
@@ -92,6 +182,7 @@ model User {
   passwordResets     PasswordReset[]
   notifications      Notification[]
   sentInvites        OrgInvite[]         @relation("InvitedBy")
+  teamMemberships    TeamMember[]
 
   @@map("Users")
   @@schema("platform")
@@ -125,6 +216,7 @@ model OrgInvite {
   roleId         String    @db.UniqueIdentifier
   token          String    @unique @db.NVarChar(255)
   status         String    @default("PENDING") @db.NVarChar(20)
+  message        String?   @db.NVarChar(1000)
   expiresAt      DateTime
   invitedById    String    @db.UniqueIdentifier
   acceptedAt     DateTime?
@@ -474,6 +566,8 @@ model FileRecord {
 //   User.twoFactorMethod   -> TOTP | SMS | EMAIL
 //   OrgMembership.status   -> ACTIVE | INVITED | SUSPENDED
 //   OrgInvite.status       -> PENDING | ACCEPTED | EXPIRED | CANCELLED
+//   TeamMember.role        -> LEAD | MEMBER | OBSERVER
+//                             (see 08-Organization-Management.md §5)
 //   Subscription.status    -> TRIALING | ACTIVE | PAST_DUE | CANCELLED | PAUSED | INCOMPLETE
 //   Subscription.billingCycle -> MONTHLY | ANNUAL
 //   Subscription.provisioningStatus -> PENDING | PROVISIONED | FAILED

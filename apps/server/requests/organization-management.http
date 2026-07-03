@@ -1,0 +1,352 @@
+@email = orgmgmt.{{$guid}}@example.com
+@password = Passw0rd123
+
+### Register a fresh org for this run (self-contained — doesn't depend on other files)
+# @name register
+POST {{baseUrl}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "firstName": "Org",
+  "lastName": "Owner",
+  "email": "{{email}}",
+  "password": "{{password}}",
+  "organizationName": "OrgMgmt Http Org"
+}
+
+@orgId = {{register.response.body.$.data.organization.id}}
+
+###############################################
+# 1. Organization Profile (GET/PUT alias over tenantService)
+###############################################
+
+### Fetch full profile
+GET {{baseUrl}}/api/v1/organizations/{{orgId}}
+
+### Update legal/contact/address fields
+PUT {{baseUrl}}/api/v1/organizations/{{orgId}}
+Content-Type: application/json
+
+{
+  "legalName": "OrgMgmt Http Org Pvt Ltd",
+  "foundedYear": 2020,
+  "website": "https://example.com",
+  "phone": "+911234567890",
+  "email": "contact@example.com",
+  "address": "123 Test Street",
+  "city": "Mumbai",
+  "state": "Maharashtra",
+  "pincode": "400001"
+}
+
+### Confirm persistence
+GET {{baseUrl}}/api/v1/organizations/{{orgId}}
+
+###############################################
+# 3. Branches
+###############################################
+
+### Create head office branch
+# @name headOffice
+POST {{baseUrl}}/api/v1/organizations/{{orgId}}/branches
+Content-Type: application/json
+
+{
+  "name": "Mumbai HQ",
+  "code": "MUM-01",
+  "city": "Mumbai",
+  "country": "IN",
+  "isHeadOffice": true
+}
+
+@headOfficeId = {{headOffice.response.body.$.data.id}}
+
+### Create a second branch, also flagged head office — should unset the first one
+# @name secondBranch
+POST {{baseUrl}}/api/v1/organizations/{{orgId}}/branches
+Content-Type: application/json
+
+{
+  "name": "Bengaluru Office",
+  "code": "BLR-01",
+  "city": "Bengaluru",
+  "country": "IN",
+  "isHeadOffice": true
+}
+
+@secondBranchId = {{secondBranch.response.body.$.data.id}}
+
+### Duplicate branch code should 409
+POST {{baseUrl}}/api/v1/organizations/{{orgId}}/branches
+Content-Type: application/json
+
+{
+  "name": "Duplicate Code Branch",
+  "code": "BLR-01"
+}
+
+### List branches — confirm only Bengaluru is head office now
+GET {{baseUrl}}/api/v1/organizations/{{orgId}}/branches
+
+### Update the Mumbai branch's address
+PUT {{baseUrl}}/api/v1/organizations/{{orgId}}/branches/{{headOfficeId}}
+Content-Type: application/json
+
+{
+  "address": "123 Marine Drive"
+}
+
+### Delete the Bengaluru branch (soft delete)
+DELETE {{baseUrl}}/api/v1/organizations/{{orgId}}/branches/{{secondBranchId}}
+
+### Confirm it no longer appears in the list
+GET {{baseUrl}}/api/v1/organizations/{{orgId}}/branches
+
+###############################################
+# 4. Departments
+###############################################
+
+### Create root department
+# @name engDept
+POST {{baseUrl}}/api/v1/organizations/{{orgId}}/departments
+Content-Type: application/json
+
+{
+  "name": "Engineering",
+  "code": "ENG"
+}
+
+@engDeptId = {{engDept.response.body.$.data.id}}
+
+### Create nested department under Engineering
+# @name frontendDept
+POST {{baseUrl}}/api/v1/organizations/{{orgId}}/departments
+Content-Type: application/json
+
+{
+  "name": "Frontend",
+  "code": "ENG-FE",
+  "parentId": "{{engDeptId}}"
+}
+
+@frontendDeptId = {{frontendDept.response.body.$.data.id}}
+
+### Attempt to delete Engineering while it still has a child — should 409
+DELETE {{baseUrl}}/api/v1/organizations/{{orgId}}/departments/{{engDeptId}}
+
+### Attempt to make Engineering its own descendant's child (cycle) — should 400
+PUT {{baseUrl}}/api/v1/organizations/{{orgId}}/departments/{{engDeptId}}
+Content-Type: application/json
+
+{
+  "parentId": "{{frontendDeptId}}"
+}
+
+### List departments
+GET {{baseUrl}}/api/v1/organizations/{{orgId}}/departments
+
+### Delete the child first, then the parent should succeed
+DELETE {{baseUrl}}/api/v1/organizations/{{orgId}}/departments/{{frontendDeptId}}
+
+###
+
+DELETE {{baseUrl}}/api/v1/organizations/{{orgId}}/departments/{{engDeptId}}
+
+###############################################
+# 5. Teams
+###############################################
+
+### Create a team
+# @name team
+POST {{baseUrl}}/api/v1/organizations/{{orgId}}/teams
+Content-Type: application/json
+
+{
+  "name": "Q4 Product Launch Team",
+  "description": "Cross-functional launch squad"
+}
+
+@teamId = {{team.response.body.$.data.id}}
+
+### List teams (owner isn't auto-added — confirm empty members)
+GET {{baseUrl}}/api/v1/organizations/{{orgId}}/teams
+
+###############################################
+# 6 & 7. Member Management + Invitations
+###############################################
+
+### List members — should show just the Owner; capture their roleId to reuse below
+# @name members
+GET {{baseUrl}}/api/v1/organizations/{{orgId}}/members
+
+@ownerRoleId = {{members.response.body.$.data[0].role.id}}
+@inviteeEmail = invitee.{{$guid}}@example.com
+
+### Filter members by search
+GET {{baseUrl}}/api/v1/organizations/{{orgId}}/members?search=Owner&page=1&limit=10
+
+### Invite a new member (Owner role, for simplicity of this manual walkthrough)
+# @name invite
+POST {{baseUrl}}/api/v1/organizations/{{orgId}}/invite
+Content-Type: application/json
+
+{
+  "email": "{{inviteeEmail}}",
+  "roleId": "{{ownerRoleId}}",
+  "message": "Welcome to the team!"
+}
+
+@inviteId = {{invite.response.body.$.data.inviteId}}
+
+### Inviting the same email again should 409 (pending invite already exists)
+POST {{baseUrl}}/api/v1/organizations/{{orgId}}/invite
+Content-Type: application/json
+
+{
+  "email": "{{inviteeEmail}}",
+  "roleId": "{{ownerRoleId}}"
+}
+
+### List pending invites
+GET {{baseUrl}}/api/v1/organizations/{{orgId}}/invites
+
+### [dev/test only] fetch the invite token (no email provider wired up)
+# @name inviteToken
+GET {{baseUrl}}/api/v1/invites/test/token?email={{inviteeEmail}}
+
+@token = {{inviteToken.response.body.$.data.token}}
+
+### Validate the invite token (unauthenticated — no cookies needed)
+GET {{baseUrl}}/api/v1/invites/{{token}}
+
+### Accept the invite as a brand-new user (no active session on this token)
+# @name acceptInvite
+POST {{baseUrl}}/api/v1/invites/{{token}}/accept
+Content-Type: application/json
+
+{
+  "password": "Passw0rd123",
+  "firstName": "Invited",
+  "lastName": "Member"
+}
+
+### Confirm the accepted invite now shows the new member in the list
+GET {{baseUrl}}/api/v1/organizations/{{orgId}}/members?status=ACTIVE
+
+### Re-accepting the same (now-used) token should 404
+POST {{baseUrl}}/api/v1/invites/{{token}}/accept
+Content-Type: application/json
+
+{
+  "password": "Passw0rd123"
+}
+
+### Cancel a fresh invite before it's accepted
+# @name inviteToCancel
+POST {{baseUrl}}/api/v1/organizations/{{orgId}}/invite
+Content-Type: application/json
+
+{
+  "email": "cancelme.{{$guid}}@example.com",
+  "roleId": "{{ownerRoleId}}"
+}
+
+@inviteToCancelId = {{inviteToCancel.response.body.$.data.inviteId}}
+
+###
+
+DELETE {{baseUrl}}/api/v1/organizations/{{orgId}}/invites/{{inviteToCancelId}}
+
+### Cancelling it twice should 409 (no longer PENDING)
+DELETE {{baseUrl}}/api/v1/organizations/{{orgId}}/invites/{{inviteToCancelId}}
+
+###############################################
+# 8. Organization Settings
+###############################################
+
+### General settings
+GET {{baseUrl}}/api/v1/organizations/{{orgId}}/settings/general
+
+###
+PUT {{baseUrl}}/api/v1/organizations/{{orgId}}/settings/general
+Content-Type: application/json
+
+{
+  "timezone": "Asia/Kolkata",
+  "language": "en",
+  "dateFormat": "DD/MM/YYYY"
+}
+
+### Branding settings
+PUT {{baseUrl}}/api/v1/organizations/{{orgId}}/settings/branding
+Content-Type: application/json
+
+{
+  "primaryColor": "#4F46E5",
+  "faviconUrl": "https://example.com/favicon.ico"
+}
+
+###
+GET {{baseUrl}}/api/v1/organizations/{{orgId}}/settings/branding
+
+### Security settings
+PUT {{baseUrl}}/api/v1/organizations/{{orgId}}/settings/security
+Content-Type: application/json
+
+{
+  "sessionTimeoutMinutes": 60,
+  "twoFactorRequired": false
+}
+
+###
+GET {{baseUrl}}/api/v1/organizations/{{orgId}}/settings/security
+
+### Notification settings
+PUT {{baseUrl}}/api/v1/organizations/{{orgId}}/settings/notifications
+Content-Type: application/json
+
+{
+  "memberInvited": true,
+  "securityAlerts": true
+}
+
+###
+GET {{baseUrl}}/api/v1/organizations/{{orgId}}/settings/notifications
+
+###############################################
+# 9. Multi-Organization Support
+###############################################
+
+### List my organizations (just this one so far)
+GET {{baseUrl}}/api/v1/auth/my-organizations
+
+### Switching to an org I'm not a member of should 403
+POST {{baseUrl}}/api/v1/auth/switch-organization
+Content-Type: application/json
+
+{
+  "organizationId": "00000000-0000-0000-0000-000000000000"
+}
+
+### Switching to my own org should succeed (no-op but exercises the endpoint)
+POST {{baseUrl}}/api/v1/auth/switch-organization
+Content-Type: application/json
+
+{
+  "organizationId": "{{orgId}}"
+}
+
+### Setting my own org as primary (already is) should succeed
+POST {{baseUrl}}/api/v1/auth/primary-organization
+Content-Type: application/json
+
+{
+  "organizationId": "{{orgId}}"
+}
+
+###############################################
+# Cross-tenant isolation + permission checks
+###############################################
+
+### Requesting another organization's id should 403 (requireOwnOrganization)
+GET {{baseUrl}}/api/v1/organizations/00000000-0000-0000-0000-000000000000/branches

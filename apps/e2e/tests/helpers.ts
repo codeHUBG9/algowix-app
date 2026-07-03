@@ -55,3 +55,17 @@ export async function registerAndVerify(page: Page, request: APIRequestContext, 
   const token = await getVerificationToken(request, opts.email);
   await verifyEmail(request, token);
 }
+
+/**
+ * Dev/test-only, same rationale as getVerificationToken — no email provider
+ * is wired up, so invite links are only logged to server stdout. See
+ * GET /api/v1/invites/test/token in invite-accept.router.ts.
+ */
+export async function getInviteToken(request: APIRequestContext, email: string): Promise<string> {
+  const res = await request.get(`${API_URL}/api/v1/invites/test/token`, { params: { email } });
+  if (!res.ok()) {
+    throw new Error(`invite test-token lookup failed: ${res.status()} ${await res.text()}`);
+  }
+  const body = await res.json();
+  return body.data.token as string;
+}

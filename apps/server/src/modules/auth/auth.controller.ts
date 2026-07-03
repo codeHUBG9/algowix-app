@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { z } from "zod";
 import { authService } from "./auth.service.js";
 import { registerSchema, loginSchema, verifyEmailSchema } from "./auth.schema.js";
 import { sendSuccess } from "../../utils/respond.js";
@@ -83,6 +84,27 @@ export const authController = {
 
   async me(req: Request, res: Response) {
     sendSuccess(res, { auth: req.auth });
+  },
+
+  async myOrganizations(req: Request, res: Response) {
+    if (!req.auth) throw new UnauthorizedError();
+    const orgs = await authService.listMyOrganizations(req.auth.userId);
+    sendSuccess(res, orgs);
+  },
+
+  async switchOrganization(req: Request, res: Response) {
+    if (!req.auth) throw new UnauthorizedError();
+    const { organizationId } = z.object({ organizationId: z.string().min(1) }).parse(req.body);
+    const { response, tokens } = await authService.switchOrganization(req.auth.userId, organizationId, getContext(req));
+    setAuthCookies(res, tokens);
+    sendSuccess(res, response);
+  },
+
+  async setPrimaryOrganization(req: Request, res: Response) {
+    if (!req.auth) throw new UnauthorizedError();
+    const { organizationId } = z.object({ organizationId: z.string().min(1) }).parse(req.body);
+    await authService.setPrimaryOrganization(req.auth.userId, organizationId);
+    sendSuccess(res, { organizationId, isPrimary: true });
   },
 
   async sessions(req: Request, res: Response) {

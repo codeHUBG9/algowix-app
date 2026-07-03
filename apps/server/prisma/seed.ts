@@ -7,6 +7,7 @@ const permissions = [
   { resource: "organization", action: "update", scope: "org" },
   { resource: "users", action: "read", scope: "org" },
   { resource: "users", action: "invite", scope: "org" },
+  { resource: "users", action: "update", scope: "org" },
   { resource: "users", action: "remove", scope: "org" },
   { resource: "roles", action: "read", scope: "org" },
   { resource: "roles", action: "create", scope: "org" },
@@ -16,14 +17,58 @@ const permissions = [
   { resource: "subscriptions", action: "manage", scope: "org" },
   { resource: "audit_logs", action: "read", scope: "org" },
   { resource: "api_keys", action: "manage", scope: "org" },
+  { resource: "branches", action: "read", scope: "org" },
+  { resource: "branches", action: "create", scope: "org" },
+  { resource: "branches", action: "update", scope: "org" },
+  { resource: "branches", action: "delete", scope: "org" },
+  { resource: "departments", action: "read", scope: "org" },
+  { resource: "departments", action: "create", scope: "org" },
+  { resource: "departments", action: "update", scope: "org" },
+  { resource: "departments", action: "delete", scope: "org" },
+  { resource: "teams", action: "read", scope: "org" },
+  { resource: "teams", action: "create", scope: "org" },
+  { resource: "teams", action: "update", scope: "org" },
+  { resource: "teams", action: "delete", scope: "org" },
+  { resource: "teams", action: "manage_members", scope: "org" },
 ] as const;
 
+const READ_ONLY_ORG_ACCESS = [
+  "organization.read",
+  "users.read",
+  "roles.read",
+  "branches.read",
+  "departments.read",
+  "teams.read",
+];
+
 const systemRoles = [
-  { name: "Owner", description: "Full access to everything", isDefault: false, allPermissions: true },
-  { name: "Admin", description: "Admin access except billing", isDefault: false, allPermissions: false },
-  { name: "Member", description: "Standard member access", isDefault: true, allPermissions: false },
-  { name: "Viewer", description: "Read-only access", isDefault: false, allPermissions: false },
-  { name: "Billing Manager", description: "Billing management only", isDefault: false, allPermissions: false },
+  { name: "Owner", description: "Full access to everything", isDefault: false, permissions: "all" as const },
+  {
+    name: "Admin",
+    description: "Admin access except billing",
+    isDefault: false,
+    permissions: permissions
+      .filter((p) => p.resource !== "billing")
+      .map((p) => `${p.resource}.${p.action}`),
+  },
+  {
+    name: "Member",
+    description: "Standard member access",
+    isDefault: true,
+    permissions: READ_ONLY_ORG_ACCESS,
+  },
+  {
+    name: "Viewer",
+    description: "Read-only access",
+    isDefault: false,
+    permissions: READ_ONLY_ORG_ACCESS,
+  },
+  {
+    name: "Billing Manager",
+    description: "Billing management only",
+    isDefault: false,
+    permissions: ["organization.read", "billing.read", "billing.manage", "subscriptions.read", "subscriptions.manage"],
+  },
 ];
 
 async function main() {
@@ -55,14 +100,17 @@ async function main() {
         },
       }));
 
-    if (role.name === "Owner") {
-      for (const permission of permissionRecords) {
-        await prisma.rolePermission.upsert({
-          where: { roleId_permissionId: { roleId: roleRecord.id, permissionId: permission.id } },
-          update: {},
-          create: { roleId: roleRecord.id, permissionId: permission.id },
-        });
-      }
+    const grantedPermissions =
+      role.permissions === "all"
+        ? permissionRecords
+        : permissionRecords.filter((p) => role.permissions.includes(`${p.resource}.${p.action}`));
+
+    for (const permission of grantedPermissions) {
+      await prisma.rolePermission.upsert({
+        where: { roleId_permissionId: { roleId: roleRecord.id, permissionId: permission.id } },
+        update: {},
+        create: { roleId: roleRecord.id, permissionId: permission.id },
+      });
     }
   }
 

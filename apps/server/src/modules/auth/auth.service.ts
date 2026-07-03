@@ -78,6 +78,13 @@ async function generateAccessTokenForMembership(membership: MembershipWithRole):
 }
 
 export const authService = {
+  // Reused by the invite-accept flow (08-Organization-Management.md §7), which
+  // must auto-login the user into the org they just joined, same as register/login.
+  issueTokensForOrgMember(userId: string, organizationId: string, context: RequestContext) {
+    return issueTokenPair(userId, organizationId, context);
+  },
+
+
   async register(input: RegisterInput, context: RequestContext) {
     const existing = await authRepository.findUserByEmail(input.email);
     if (existing) throw new ConflictError("An account with this email already exists");
@@ -237,6 +244,38 @@ export const authService = {
     const verification = await authRepository.findLatestVerificationTokenForEmail(email);
     if (!verification) throw new NotFoundError("No pending verification token for this email");
     return verification.token;
+  },
+
+  // 08-Organization-Management.md §9 — Multi-Organization Support.
+  async listMyOrganizations(userId: string) {
+    const memberships = await authRepository.listMembershipsForUser(userId);
+    return memberships.map((m) => ({
+      organization: toAuthOrganization(m.organization),
+      role: m.role.name,
+      isPrimary: m.isPrimary,
+    }));
+  },
+
+  async switchOrganization(userId: string, organizationId: string, context: RequestContext) {
+    const membership = await authRepository.findMembership(userId, organizationId);
+    if (!membership || membership.status !== "ACTIVE") {
+      throw new ForbiddenError("You are not an active member of this organization");
+    }
+
+    const tokens = await issueTokenPair(userId, organizationId, context);
+    return {
+      response: {
+        organization: toAuthOrganization(membership.organization),
+        expiresAt: tokens.expiresAt.toISOString(),
+      },
+      tokens,
+    };
+  },
+
+  async setPrimaryOrganization(userId: string, organizationId: string): Promise<void> {
+    const membership = await authRepository.findMembership(userId, organizationId);
+    if (!membership) throw new ForbiddenError("You are not a member of this organization");
+    await authRepository.setPrimaryMembership(userId, organizationId);
   },
 
   async logout(refreshToken: string): Promise<void> {

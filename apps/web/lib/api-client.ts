@@ -33,6 +33,15 @@ export const apiClient = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, data?: unknown) =>
     request<T>(path, { method: "POST", body: data ? JSON.stringify(data) : undefined }),
+  put: <T>(path: string, data?: unknown) =>
+    request<T>(path, { method: "PUT", body: data ? JSON.stringify(data) : undefined }),
   patch: <T>(path: string, data?: unknown) =>
     request<T>(path, { method: "PATCH", body: data ? JSON.stringify(data) : undefined }),
+  delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  upload: <T>(path: string, formData: FormData) => {
+    // No Content-Type header — the browser sets the multipart boundary itself.
+    return fetch(`${API_URL}${path}`, { method: "POST", credentials: "include", body: formData }).then((res) =>
+      handleResponse<T>(res)
+    );
+  },
 };
