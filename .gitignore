@@ -18,3 +18,8 @@ Thumbs.db
 
 apps/server/prisma/generated/
 apps/server/keys/*.pem
+
+apps/e2e/test-results/
+apps/e2e/playwright-report/
+apps/e2e/blob-report/
+apps/e2e/.cache/

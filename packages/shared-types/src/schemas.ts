@@ -20,5 +20,20 @@ export const loginSchema = z.object({
   organizationSlug: z.string().trim().optional(),
 });
 
+export const verifyEmailSchema = z.object({
+  token: z.string().trim().min(1, "Verification token is required"),
+});
+
+export const updateOrganizationSchema = z.object({
+  name: z.string().trim().min(2, "Organization name is required").max(255).optional(),
+  logoUrl: z.string().trim().url("Enter a valid URL").max(500).optional().or(z.literal("")),
+  industry: z.string().trim().max(100).optional(),
+  size: z.enum(["MICRO", "SMALL", "MEDIUM", "LARGE", "ENTERPRISE"]).optional().or(z.literal("")),
+  timezone: z.string().trim().max(50).optional(),
+  currency: z.string().trim().length(3, "Use a 3-letter currency code").optional().or(z.literal("")),
+});
+
 export type RegisterFormInput = z.infer<typeof registerSchema>;
 export type LoginFormInput = z.infer<typeof loginSchema>;
+export type VerifyEmailFormInput = z.infer<typeof verifyEmailSchema>;
+export type UpdateOrganizationFormInput = z.infer<typeof updateOrganizationSchema>;

@@ -99,6 +99,27 @@ export const authRepository = {
     return prisma.emailVerification.create({ data: { userId, token, expiresAt } });
   },
 
+  findEmailVerificationByToken(token: string) {
+    return prisma.emailVerification.findUnique({ where: { token } });
+  },
+
+  findLatestVerificationTokenForEmail(email: string) {
+    return prisma.emailVerification.findFirst({
+      where: { user: { email }, usedAt: null },
+      orderBy: { createdAt: "desc" },
+    });
+  },
+
+  async markEmailVerified(userId: string, verificationId: string): Promise<void> {
+    await prisma.$transaction([
+      prisma.emailVerification.update({ where: { id: verificationId }, data: { usedAt: new Date() } }),
+      prisma.user.update({
+        where: { id: userId },
+        data: { emailVerified: true, emailVerifiedAt: new Date() },
+      }),
+    ]);
+  },
+
   async registerOrganization(input: {
     firstName: string;
     lastName: string;

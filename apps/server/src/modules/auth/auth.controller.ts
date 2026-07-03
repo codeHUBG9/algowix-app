@@ -1,8 +1,8 @@
 import type { Request, Response } from "express";
 import { authService } from "./auth.service.js";
-import { registerSchema, loginSchema } from "./auth.schema.js";
+import { registerSchema, loginSchema, verifyEmailSchema } from "./auth.schema.js";
 import { sendSuccess } from "../../utils/respond.js";
-import { UnauthorizedError } from "../../utils/errors.js";
+import { UnauthorizedError, ValidationError } from "../../utils/errors.js";
 import { env } from "../../config/env.js";
 import type { TokenPair } from "./auth.types.js";
 
@@ -66,6 +66,19 @@ export const authController = {
     if (refreshToken) await authService.logout(refreshToken);
     clearAuthCookies(res);
     sendSuccess(res, { loggedOut: true });
+  },
+
+  async verifyEmail(req: Request, res: Response) {
+    const input = verifyEmailSchema.parse(req.body);
+    await authService.verifyEmail(input);
+    sendSuccess(res, { verified: true });
+  },
+
+  async getTestVerificationToken(req: Request, res: Response) {
+    const email = req.query.email;
+    if (typeof email !== "string" || !email) throw new ValidationError("email query param is required");
+    const token = await authService.getTestVerificationToken(email);
+    sendSuccess(res, { token });
   },
 
   async me(req: Request, res: Response) {

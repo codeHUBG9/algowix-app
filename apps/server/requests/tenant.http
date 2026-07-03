@@ -1,0 +1,51 @@
+@email = tenant.{{$guid}}@example.com
+@password = Passw0rd123
+
+### Register a fresh org for this run (self-contained — doesn't depend on auth.http)
+# @name register
+POST {{baseUrl}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "firstName": "Tenant",
+  "lastName": "Tester",
+  "email": "{{email}}",
+  "password": "{{password}}",
+  "organizationName": "Tenant Http Org"
+}
+
+### Current tenant — status PENDING right after register
+GET {{baseUrl}}/api/v1/tenants/me
+
+### Update organization settings (Owner has the organization.update permission)
+PATCH {{baseUrl}}/api/v1/tenants/me
+Content-Type: application/json
+
+{
+  "industry": "Software",
+  "size": "SMALL"
+}
+
+### List members — should show just the Owner (this user)
+GET {{baseUrl}}/api/v1/tenants/me/members
+
+### [dev/test only] fetch the verification token
+# @name verificationToken
+GET {{baseUrl}}/api/v1/auth/test/verification-token?email={{email}}
+
+### Verify email — PENDING -> TRIALING (also fires provisioning for pending subscriptions)
+POST {{baseUrl}}/api/v1/auth/verify-email
+Content-Type: application/json
+
+{
+  "token": "{{verificationToken.response.body.$.data.token}}"
+}
+
+### Confirm status is now TRIALING with trialEndsAt set
+GET {{baseUrl}}/api/v1/tenants/me
+
+### Invalid transition check — cancelling twice should 409 the second time (run this request twice)
+POST {{baseUrl}}/api/v1/tenants/me/cancel
+
+### Confirm tenant endpoints now 403 with a TENANT_CANCELLED code
+GET {{baseUrl}}/api/v1/tenants/me

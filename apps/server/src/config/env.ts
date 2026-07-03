@@ -13,6 +13,8 @@ const envSchema = z.object({
   JWT_KEY_ID: z.string().default("dev-key-1"),
   ACCESS_TOKEN_TTL: z.string().default("15m"),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().default(30),
+  PLATFORM_ADMIN_KEY: z.string().default("dev-platform-admin-key-change-me"),
+  PROVISION_RETRY_DELAYS_MS: z.string().default("60000,300000,900000"),
 });
 
 const parsed = envSchema.safeParse(process.env);

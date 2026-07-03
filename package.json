@@ -15,6 +15,7 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
+    "test:e2e": "pnpm --filter @algowix/e2e test",
     "typecheck": "turbo run typecheck",
     "db:migrate": "pnpm --filter @algowix/server prisma:migrate",
     "db:generate": "pnpm --filter @algowix/server prisma:generate",

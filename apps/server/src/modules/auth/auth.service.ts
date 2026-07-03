@@ -4,9 +4,10 @@ import { hashPassword, verifyPassword } from "../../services/password.service.js
 import { generateAccessToken } from "../../services/jwt.service.js";
 import { generateOpaqueToken, hashToken } from "../../utils/hash-token.js";
 import { slugify } from "../../utils/slug.js";
-import { UnauthorizedError, ConflictError, ForbiddenError } from "../../utils/errors.js";
+import { UnauthorizedError, ConflictError, ForbiddenError, NotFoundError } from "../../utils/errors.js";
 import { env } from "../../config/env.js";
-import type { RegisterInput, LoginInput } from "./auth.schema.js";
+import { tenantService } from "../tenant/tenant.service.js";
+import type { RegisterInput, LoginInput, VerifyEmailInput } from "./auth.schema.js";
 import type { RequestContext, TokenPair } from "./auth.types.js";
 import type { AuthUser, AuthOrganization, LoginResponse } from "@algowix/shared-types";
 
@@ -107,7 +108,7 @@ export const authService = {
       new Date(Date.now() + 24 * 60 * 60 * 1000)
     );
     // TODO: dispatch verification email via notification service (14-Notifications.md)
-    console.log(`[dev] Email verification link: /auth/verify-email?token=${verificationToken}`);
+    console.log(`[dev] Email verification token (POST /api/v1/auth/verify-email {"token":"..."}): ${verificationToken}`);
 
     const tokens = await issueTokenPair(user.id, organization.id, context);
 
@@ -209,6 +210,33 @@ export const authService = {
     const accessToken = await generateAccessTokenForMembership(membership);
 
     return { accessToken, refreshToken: newRefreshToken, expiresAt };
+  },
+
+  async verifyEmail(input: VerifyEmailInput): Promise<void> {
+    const verification = await authRepository.findEmailVerificationByToken(input.token);
+    if (!verification || verification.usedAt || verification.expiresAt < new Date()) {
+      throw new NotFoundError("Invalid or expired verification token");
+    }
+
+    await authRepository.markEmailVerified(verification.userId, verification.id);
+
+    const membership = await authRepository.findPrimaryMembership(verification.userId);
+    if (membership) {
+      // PENDING -> TRIALING per 07-Tenant-Management.md §2; also kicks off product provisioning.
+      await tenantService.activateTrial(membership.organizationId, {
+        actorType: "SYSTEM",
+        actorId: verification.userId,
+      });
+    }
+  },
+
+  // Dev/test only — see the route guard in auth.router.ts. Lets .http request
+  // collections and the E2E suite complete the verify-email flow without an
+  // email provider or scraping server stdout for the console-logged token.
+  async getTestVerificationToken(email: string): Promise<string> {
+    const verification = await authRepository.findLatestVerificationTokenForEmail(email);
+    if (!verification) throw new NotFoundError("No pending verification token for this email");
+    return verification.token;
   },
 
   async logout(refreshToken: string): Promise<void> {

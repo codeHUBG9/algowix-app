@@ -1,0 +1,58 @@
+@email = auth.{{$guid}}@example.com
+@password = Passw0rd123
+
+### Register — creates a User + Organization (Organization starts PENDING)
+# @name register
+POST {{baseUrl}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "firstName": "Rest",
+  "lastName": "Client",
+  "email": "{{email}}",
+  "password": "{{password}}",
+  "organizationName": "Rest Client Org"
+}
+
+### Current session (cookie set by register/login above)
+GET {{baseUrl}}/api/v1/auth/me
+
+### Active sessions for this user
+GET {{baseUrl}}/api/v1/auth/sessions
+
+### [dev/test only] fetch the verification token instead of scraping server stdout
+# @name verificationToken
+GET {{baseUrl}}/api/v1/auth/test/verification-token?email={{email}}
+
+### Verify email — flips the org PENDING -> TRIALING (see tenant.http for the tenant-side effects)
+POST {{baseUrl}}/api/v1/auth/verify-email
+Content-Type: application/json
+
+{
+  "token": "{{verificationToken.response.body.$.data.token}}"
+}
+
+### Refresh — rotates the refresh token, issues a new access token
+POST {{baseUrl}}/api/v1/auth/refresh
+
+### Login again in a fresh "session" (only one org on this account, so organizationSlug is optional)
+# @name login
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### Login with the wrong password — expect 401 UNAUTHORIZED
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "WrongPassword123"
+}
+
+### Logout — revokes the current session's refresh token
+POST {{baseUrl}}/api/v1/auth/logout

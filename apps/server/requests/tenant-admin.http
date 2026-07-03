@@ -1,0 +1,60 @@
+@email = tenant-admin.{{$guid}}@example.com
+@password = Passw0rd123
+
+### Register a fresh org to exercise admin actions against (status PENDING)
+# @name register
+POST {{baseUrl}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "firstName": "Admin",
+  "lastName": "Tester",
+  "email": "{{email}}",
+  "password": "{{password}}",
+  "organizationName": "Tenant Admin Http Org"
+}
+
+@orgId = {{register.response.body.$.data.organization.id}}
+
+### Verify email to reach TRIALING — suspend below is only reachable from TRIALING/ACTIVE, not PENDING
+# @name verificationToken
+GET {{baseUrl}}/api/v1/auth/test/verification-token?email={{email}}
+
+###
+POST {{baseUrl}}/api/v1/auth/verify-email
+Content-Type: application/json
+
+{
+  "token": "{{verificationToken.response.body.$.data.token}}"
+}
+
+### Wrong platform key — expect 401 UNAUTHORIZED
+GET {{baseUrl}}/api/v1/admin/tenants/{{orgId}}
+x-platform-key: not-the-real-key
+
+### Correct platform key — full org detail (now TRIALING)
+GET {{baseUrl}}/api/v1/admin/tenants/{{orgId}}
+x-platform-key: {{platformAdminKey}}
+
+### Suspend (e.g. payment failure after 30 days dunning, per 07-Tenant-Management.md §6.1)
+POST {{baseUrl}}/api/v1/admin/tenants/{{orgId}}/suspend
+x-platform-key: {{platformAdminKey}}
+Content-Type: application/json
+
+{
+  "reason": "Payment failed after 30 days dunning"
+}
+
+### Confirm the org's own session now gets 403 TENANT_SUSPENDED
+GET {{baseUrl}}/api/v1/tenants/me
+
+### Reactivate (e.g. payment retried successfully)
+POST {{baseUrl}}/api/v1/admin/tenants/{{orgId}}/reactivate
+x-platform-key: {{platformAdminKey}}
+
+### Self-cancel (uses the cookie session from registration above) to reach CANCELLED
+POST {{baseUrl}}/api/v1/tenants/me/cancel
+
+### Purge before the 60-day retention window has elapsed — expect 409 CONFLICT
+POST {{baseUrl}}/api/v1/admin/tenants/{{orgId}}/purge
+x-platform-key: {{platformAdminKey}}

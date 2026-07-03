@@ -1,0 +1,9 @@
+{
+  "rest-client.enableCookieJar": true,
+  "rest-client.environmentVariables": {
+    "local": {
+      "baseUrl": "http://localhost:4000",
+      "platformAdminKey": "dev-platform-admin-key-change-me"
+    }
+  }
+}
