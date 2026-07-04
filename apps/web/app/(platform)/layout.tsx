@@ -1,10 +1,11 @@
 import { TenantStatusGate } from "./_components/tenant-status-gate";
 import { Sidebar } from "./_components/sidebar";
 import { Topbar } from "./_components/topbar";
+import { ShellOverlays } from "./_components/shell-overlays";
 
 export default function PlatformLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex min-h-screen bg-surface-muted">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar />
@@ -12,6 +13,7 @@ export default function PlatformLayout({ children }: { children: React.ReactNode
           <TenantStatusGate>{children}</TenantStatusGate>
         </main>
       </div>
+      <ShellOverlays />
     </div>
   );
 }

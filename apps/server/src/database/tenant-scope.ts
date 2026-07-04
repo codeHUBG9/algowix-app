@@ -11,6 +11,7 @@ import { prisma } from "./prisma.js";
 // tenant are listed. TeamMember is scoped indirectly via its parent Team
 // (it has no organizationId column of its own), so it's deliberately absent.
 // Same reasoning excludes InvoiceLineItem (scoped via its parent Invoice) and
+// InventoryMovement (scoped via its parent InventoryItem), and
 // Coupon (platform-wide, no organizationId at all) — see 11-Billing.md.
 const TENANT_SCOPED_MODELS = new Set([
   "OrgMembership",
@@ -21,6 +22,7 @@ const TENANT_SCOPED_MODELS = new Set([
   "ApiKey",
   "Webhook",
   "FileRecord",
+  "InventoryItem",
   "Branch",
   "Department",
   "Team",

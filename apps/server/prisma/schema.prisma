@@ -6,7 +6,7 @@ generator client {
 datasource db {
   provider = "sqlserver"
   url      = env("DATABASE_URL")
-  schemas  = ["platform", "billing", "audit", "developer", "files"]
+  schemas  = ["platform", "billing", "audit", "developer", "files", "inventory"]
 }
 
 // ============================================================
@@ -61,6 +61,7 @@ model Organization {
   apiKeys        ApiKey[]
   webhooks       Webhook[]
   files          FileRecord[]
+  inventoryItems InventoryItem[]
   branches       Branch[]
   departments    Department[]
   teams          Team[]
@@ -685,6 +686,51 @@ model FileRecord {
 
   @@map("Files")
   @@schema("files")
+}
+
+// ============================================================
+// INVENTORY — Phase 25 §5 (built in-app; unrelated to the seeded
+// "inventory" marketplace Product placeholder, which represents a
+// hypothetical separate SaaS product, not this feature)
+// ============================================================
+
+model InventoryItem {
+  id             String    @id @default(uuid()) @db.UniqueIdentifier
+  organizationId String    @db.UniqueIdentifier
+  sku            String    @db.NVarChar(50)
+  name           String    @db.NVarChar(255)
+  description    String?   @db.NVarChar(1000)
+  category       String?   @db.NVarChar(100)
+  quantity       Int       @default(0)
+  reorderPoint   Int       @default(10)
+  unitCost       Decimal   @db.Decimal(10, 2)
+  unitPrice      Decimal   @db.Decimal(10, 2)
+  location       String?   @db.NVarChar(255)
+  status         String    @default("ACTIVE") @db.NVarChar(20)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id])
+  movements    InventoryMovement[]
+
+  @@unique([organizationId, sku])
+  @@map("InventoryItems")
+  @@schema("inventory")
+}
+
+model InventoryMovement {
+  id          String   @id @default(uuid()) @db.UniqueIdentifier
+  itemId      String   @db.UniqueIdentifier
+  type        String   @db.NVarChar(20)
+  quantity    Int
+  reason      String?  @db.NVarChar(500)
+  performedBy String   @db.UniqueIdentifier
+  createdAt   DateTime @default(now())
+
+  item InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@map("InventoryMovements")
+  @@schema("inventory")
 }
 
 // ============================================================

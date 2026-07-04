@@ -1,3 +1,19 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --surface: #ffffff;
+  --surface-muted: #f8fafc;
+  --surface-subtle: #f1f5f9;
+  --surface-overlay: #0f172a;
+  --border: #e2e8f0;
+}
+
+.dark {
+  --surface: #0f172a;
+  --surface-muted: #131c2e;
+  --surface-subtle: #1a2438;
+  --surface-overlay: #f8fafc;
+  --border: #263149;
+}

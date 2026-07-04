@@ -39,6 +39,8 @@ const permissions = [
   { resource: "integrations", action: "manage", scope: "org" },
   { resource: "reports", action: "read", scope: "org" },
   { resource: "marketplace", action: "manage", scope: "org" },
+  { resource: "inventory", action: "read", scope: "org" },
+  { resource: "inventory", action: "manage", scope: "org" },
 ] as const;
 
 const READ_ONLY_ORG_ACCESS = [
@@ -49,6 +51,7 @@ const READ_ONLY_ORG_ACCESS = [
   "departments.read",
   "teams.read",
   "files.read",
+  "inventory.read",
   "reports.read",
 ];
 
@@ -125,15 +128,24 @@ async function main() {
     }
   }
 
+  // Phase 25 §Milestone 3 — real deployed products (brixcore-crm, hrms-portal)
+  // are launched via the SSO flow (product/launch.service.ts), not rebuilt in
+  // this app. Their dev ports (crm-web 3002, hrms-web 3003 — confirm these
+  // against whatever you actually run locally) are overridable via env so
+  // `update:` below fixes an already-seeded prod-domain row without a manual
+  // DB edit; unset, it falls back to the prod-like placeholder domain.
+  const crmBaseUrl = process.env.CRM_PRODUCT_BASE_URL ?? "https://crm.algowix.com";
+  const hrmsBaseUrl = process.env.HRMS_PRODUCT_BASE_URL ?? "https://hrms.algowix.com";
+
   console.log("Seeding CRM product + Free plan...");
   const crm = await prisma.product.upsert({
     where: { slug: "crm" },
-    update: {},
+    update: { baseUrl: crmBaseUrl },
     create: {
       slug: "crm",
       name: "CRM",
       description: "Sales pipeline, contacts, and deal management",
-      baseUrl: "https://crm.algowix.com",
+      baseUrl: crmBaseUrl,
       category: "Sales",
     },
   });
@@ -195,6 +207,39 @@ async function main() {
       baseUrl: "https://inventory.algowix.com",
       category: "Operations",
       isActive: false,
+    },
+  });
+
+  console.log("Seeding HRMS product + Standard plan...");
+  const hrms = await prisma.product.upsert({
+    where: { slug: "hrms" },
+    update: { baseUrl: hrmsBaseUrl },
+    create: {
+      slug: "hrms",
+      name: "HRMS",
+      description: "Employee directory, leave management, and org chart",
+      baseUrl: hrmsBaseUrl,
+      category: "HR",
+    },
+  });
+
+  // Unlike CRM, new orgs aren't auto-subscribed to HRMS (see auth.repository.ts) —
+  // an org must subscribe from /dashboard/products (POST /billing/checkout)
+  // before the sidebar's HRMS launch tile enables.
+  await prisma.productPlan.upsert({
+    where: { productId_slug: { productId: hrms.id, slug: "standard" } },
+    update: {},
+    create: {
+      productId: hrms.id,
+      name: "Standard",
+      slug: "standard",
+      monthlyPrice: 499,
+      annualPrice: 4990,
+      maxSeats: 25,
+      trialDays: 14,
+      features: JSON.stringify(["25 employees", "Leave management", "Org chart"]),
+      limits: JSON.stringify({ employees: 25 }),
+      trialConfig: trialConfig("SUSPEND", false),
     },
   });
 

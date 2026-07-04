@@ -1,0 +1,116 @@
+@email = inventory.{{$guid}}@example.com
+@password = Passw0rd123
+
+### Register a fresh org — Owner role gets "inventory.manage" via the
+### permissions="all" grant in prisma/seed.ts.
+# @name register
+POST {{baseUrl}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "firstName": "Inventory",
+  "lastName": "Tester",
+  "email": "{{email}}",
+  "password": "{{password}}",
+  "organizationName": "Inventory Http Org"
+}
+
+###############################################
+# 1. Empty state
+###############################################
+
+### No items yet
+GET {{baseUrl}}/api/v1/inventory
+
+### No low-stock items yet
+GET {{baseUrl}}/api/v1/inventory/low-stock
+
+###############################################
+# 2. Create + read
+###############################################
+
+# @name createItem
+POST {{baseUrl}}/api/v1/inventory
+Content-Type: application/json
+
+{
+  "sku": "WIDGET-001",
+  "name": "Blue Widget",
+  "description": "Standard blue widget",
+  "category": "Widgets",
+  "quantity": 5,
+  "reorderPoint": 10,
+  "unitCost": 3.5,
+  "unitPrice": 9.99,
+  "location": "Warehouse A"
+}
+
+@itemId = {{createItem.response.body.$.data.id}}
+
+### Duplicate SKU — 409
+POST {{baseUrl}}/api/v1/inventory
+Content-Type: application/json
+
+{
+  "sku": "WIDGET-001",
+  "name": "Duplicate",
+  "quantity": 1,
+  "reorderPoint": 1,
+  "unitCost": 1,
+  "unitPrice": 1
+}
+
+### Quantity (5) <= reorderPoint (10) — shows up in low-stock
+GET {{baseUrl}}/api/v1/inventory/low-stock
+
+### List — search by SKU
+GET {{baseUrl}}/api/v1/inventory?search=WIDGET
+
+### Get by id — includes empty movements array
+GET {{baseUrl}}/api/v1/inventory/{{itemId}}
+
+###############################################
+# 3. Update
+###############################################
+
+PATCH {{baseUrl}}/api/v1/inventory/{{itemId}}
+Content-Type: application/json
+
+{ "reorderPoint": 2, "location": "Warehouse B" }
+
+### No longer low-stock (qty 5 > reorderPoint 2)
+GET {{baseUrl}}/api/v1/inventory/low-stock
+
+###############################################
+# 4. Movements
+###############################################
+
+### Stock IN — quantity 5 -> 15
+POST {{baseUrl}}/api/v1/inventory/{{itemId}}/movement
+Content-Type: application/json
+
+{ "type": "IN", "quantity": 10, "reason": "Restock from supplier" }
+
+### Stock OUT — quantity 15 -> 12
+POST {{baseUrl}}/api/v1/inventory/{{itemId}}/movement
+Content-Type: application/json
+
+{ "type": "OUT", "quantity": 3, "reason": "Customer order #4821" }
+
+### Over-withdrawal — 422, only 12 in stock
+POST {{baseUrl}}/api/v1/inventory/{{itemId}}/movement
+Content-Type: application/json
+
+{ "type": "OUT", "quantity": 999 }
+
+### Movement history now shows both entries, quantity is 12
+GET {{baseUrl}}/api/v1/inventory/{{itemId}}
+
+###############################################
+# 5. Delete
+###############################################
+
+DELETE {{baseUrl}}/api/v1/inventory/{{itemId}}
+
+### 404 after delete
+GET {{baseUrl}}/api/v1/inventory/{{itemId}}

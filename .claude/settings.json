@@ -59,10 +59,20 @@
       "PowerShell(Stop-Process -Id 8896,49204 -Force -Confirm:$false)",
       "PowerShell(Get-Process -Id 8896,49204 -ErrorAction SilentlyContinue)",
       "Bash(pnpm --filter @algowix/web add lucide-react)",
-      "Bash(pnpm --filter @algowix/web add recharts)"
+      "Bash(pnpm --filter @algowix/web add recharts)",
+      "Bash(pnpm --filter @algowix/web add next-themes framer-motion cmdk @tanstack/react-table sonner zustand react-markdown rehype-highlight @radix-ui/react-dialog @radix-ui/react-dropdown-menu @radix-ui/react-tooltip @radix-ui/react-tabs @radix-ui/react-avatar @radix-ui/react-slot class-variance-authority clsx tailwind-merge)",
+      "Bash(pnpm --filter @algowix/web add tailwindcss-animate)",
+      "Bash(pnpm --filter @algowix/web add @anthropic-ai/sdk)",
+      "Bash(pnpm --filter @algowix/web add -D @tailwindcss/typography)",
+      "Bash(pnpm --filter @algowix/web build)",
+      "PowerShell(Get-CimInstance Win32_Process -Filter \"Name='node.exe'\")",
+      "Bash(taskkill //PID 42136 //F)",
+      "Bash(pnpm --filter @algowix/server test)",
+      "Bash(mkdir -p \"d:/VK-SAAS/algowix-app/apps/web/app/\\(platform\\)/dashboard/inventory/[id]\")"
     ],
     "additionalDirectories": [
-      "D:\\VK-SAAS\\algowix-app\\packages\\platform-sdk\\src"
+      "D:\\VK-SAAS\\algowix-app\\packages\\platform-sdk\\src",
+      "d:\\VK-SAAS\\algowix-app\\apps\\web\\app\\(platform)\\dashboard\\inventory"
     ]
   }
 }

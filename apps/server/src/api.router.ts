@@ -22,6 +22,7 @@ import { webhookRouter } from "./modules/webhook/webhook.router.js";
 import { integrationRouter } from "./modules/integration/integration.router.js";
 import { marketplaceRouter } from "./modules/marketplace/marketplace.router.js";
 import { developerRouter } from "./modules/developer/developer.router.js";
+import { inventoryRouter } from "./modules/inventory/inventory.router.js";
 
 export const apiRouter = Router();
 
@@ -46,6 +47,7 @@ apiRouter.use("/webhooks", webhookRouter);
 apiRouter.use("/integrations", integrationRouter);
 apiRouter.use("/marketplace", marketplaceRouter);
 apiRouter.use("/developer", developerRouter);
+apiRouter.use("/inventory", inventoryRouter);
 
 // Dev/test-only — see internal.dev.router.ts. Never registered in production.
 if (env.NODE_ENV !== "production") {
