@@ -1,0 +1,210 @@
+@email = billing.{{$guid}}@example.com
+@password = Passw0rd123
+
+### Register a fresh org — auth.repository auto-subscribes new orgs to CRM's
+### free plan (TRIALING), so checkout below upgrades that existing subscription
+### rather than needing a separate "create subscription" step.
+# @name register
+POST {{baseUrl}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "firstName": "Billing",
+  "lastName": "Tester",
+  "email": "{{email}}",
+  "password": "{{password}}",
+  "organizationName": "Billing Http Org"
+}
+
+@orgId = {{register.response.body.$.data.organization.id}}
+
+###############################################
+# 1. Pre-checkout reads (11-Billing.md §10)
+###############################################
+
+### No invoices yet
+GET {{baseUrl}}/api/v1/billing/invoices
+
+### Usage — seats used vs. Free plan's maxSeats (2)
+GET {{baseUrl}}/api/v1/billing/usage?product=crm
+
+### Upcoming invoice preview for the current (Free) plan
+GET {{baseUrl}}/api/v1/billing/upcoming?product=crm
+
+### Validate the seeded LAUNCH50 coupon
+POST {{baseUrl}}/api/v1/billing/coupon/validate
+Content-Type: application/json
+
+{ "code": "LAUNCH50", "productSlug": "crm" }
+
+### Unknown coupon code — valid: false
+POST {{baseUrl}}/api/v1/billing/coupon/validate
+Content-Type: application/json
+
+{ "code": "NOT-A-REAL-CODE" }
+
+###############################################
+# 2. Checkout — upgrades the Free trial to Growth, applying the coupon.
+# No real Razorpay/Stripe keys are configured, so selectGateway() returns
+# MockGateway (gatewayProvider: "MOCK") — see gateway/index.ts.
+###############################################
+
+# @name checkout
+POST {{baseUrl}}/api/v1/billing/checkout
+Content-Type: application/json
+
+{
+  "productSlug": "crm",
+  "planSlug": "growth",
+  "billingCycle": "MONTHLY",
+  "couponCode": "LAUNCH50"
+}
+
+@invoiceId = {{checkout.response.body.$.data.invoiceId}}
+@orderId = {{checkout.response.body.$.data.orderId}}
+
+### Invoice is OPEN (not yet paid) — 50% coupon discount + 18% GST reflected in the total
+GET {{baseUrl}}/api/v1/billing/invoices/{{invoiceId}}
+
+### Checking out again while a subscription is already mid-checkout (still
+### TRIALING/plan-swapped, not ACTIVE yet) is allowed — only an ACTIVE sub 409s.
+### Sign the mock gateway webhook for this order — see mock.gateway.ts /
+### /dev/billing/sign-mock-webhook (mirrors 09's /dev/sign-internal-key pattern).
+# @name signPayment
+POST {{baseUrl}}/api/v1/dev/billing/sign-mock-webhook
+Content-Type: application/json
+
+{ "event": "payment.captured", "orderId": "{{orderId}}" }
+
+### Fire the simulated webhook — activates the subscription, marks the invoice PAID
+POST {{baseUrl}}/webhooks/mock
+Content-Type: application/json
+x-mock-signature: {{signPayment.response.body.$.data.headers.x-mock-signature}}
+x-mock-timestamp: {{signPayment.response.body.$.data.headers.x-mock-timestamp}}
+
+{{signPayment.response.body.$.data.rawBody}}
+
+### Invoice is now PAID
+GET {{baseUrl}}/api/v1/billing/invoices/{{invoiceId}}
+
+### Download the generated PDF
+GET {{baseUrl}}/api/v1/billing/invoices/{{invoiceId}}/download
+
+### Checkout again for the same (now ACTIVE) product/plan — 409
+POST {{baseUrl}}/api/v1/billing/checkout
+Content-Type: application/json
+
+{ "productSlug": "crm", "planSlug": "growth", "billingCycle": "MONTHLY" }
+
+###############################################
+# 3. Refund (11-Billing.md §7 — beyond the doc's literal §10 list, added since
+# §7/§9 clearly expect one)
+###############################################
+
+### Full refund — paid moments ago, well within the 7-day window
+POST {{baseUrl}}/api/v1/billing/invoices/{{invoiceId}}/refund
+Content-Type: application/json
+
+{ "reason": "Customer changed their mind" }
+
+### Refunding again — no remaining successful (non-refunded) payment state change,
+### but still returns 200 since the payment row itself is found (idempotent status update)
+POST {{baseUrl}}/api/v1/billing/invoices/{{invoiceId}}/refund
+Content-Type: application/json
+
+{}
+
+###############################################
+# 4. Payment methods
+###############################################
+
+### No payment methods yet
+GET {{baseUrl}}/api/v1/billing/payment-methods
+
+# @name addMethod
+POST {{baseUrl}}/api/v1/billing/payment-methods
+Content-Type: application/json
+
+{ "gatewayMethodId": "mock_pm_1", "type": "CARD", "brand": "Visa", "last4": "4242", "isDefault": true }
+
+@methodId = {{addMethod.response.body.$.data.id}}
+
+### A second method, not default
+POST {{baseUrl}}/api/v1/billing/payment-methods
+Content-Type: application/json
+
+{ "gatewayMethodId": "mock_pm_2", "type": "UPI", "brand": "GPay" }
+
+### List — first method is default
+GET {{baseUrl}}/api/v1/billing/payment-methods
+
+### Remove the first (default) method
+DELETE {{baseUrl}}/api/v1/billing/payment-methods/{{methodId}}
+
+###############################################
+# 5. Payment-failure path — a second org, checkout, simulate a decline
+###############################################
+
+@email2 = billing-fail.{{$guid}}@example.com
+
+# @name register2
+POST {{baseUrl}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "firstName": "Billing",
+  "lastName": "Failer",
+  "email": "{{email2}}",
+  "password": "{{password}}",
+  "organizationName": "Billing Fail Http Org"
+}
+
+# @name checkout2
+POST {{baseUrl}}/api/v1/billing/checkout
+Content-Type: application/json
+
+{ "productSlug": "crm", "planSlug": "growth", "billingCycle": "MONTHLY" }
+
+@orderId2 = {{checkout2.response.body.$.data.orderId}}
+
+# @name signFailure
+POST {{baseUrl}}/api/v1/dev/billing/sign-mock-webhook
+Content-Type: application/json
+
+{ "event": "payment.failed", "orderId": "{{orderId2}}", "failureReason": "Card declined" }
+
+### Fires the failure webhook — TRIALING -> INCOMPLETE (first paid attempt failed, per subscription.lifecycle.ts)
+POST {{baseUrl}}/webhooks/mock
+Content-Type: application/json
+x-mock-signature: {{signFailure.response.body.$.data.headers.x-mock-signature}}
+x-mock-timestamp: {{signFailure.response.body.$.data.headers.x-mock-timestamp}}
+
+{{signFailure.response.body.$.data.rawBody}}
+
+### Tampered signature — 400, not applied
+POST {{baseUrl}}/webhooks/mock
+Content-Type: application/json
+x-mock-signature: 0000000000000000000000000000000000000000000000000000000000000000
+x-mock-timestamp: {{signFailure.response.body.$.data.headers.x-mock-timestamp}}
+
+{{signFailure.response.body.$.data.rawBody}}
+
+###############################################
+# 6. Admin (platform-key gated) — dunning + manual credits
+###############################################
+
+### Wrong platform key — 401
+POST {{baseUrl}}/api/v1/admin/billing/run-dunning
+x-platform-key: not-the-real-key
+
+### Runs the dunning schedule against every PAST_DUE subscription — 0 processed
+### here since nothing is PAST_DUE yet (INCOMPLETE from above isn't dunned).
+POST {{baseUrl}}/api/v1/admin/billing/run-dunning
+x-platform-key: {{platformAdminKey}}
+
+### Issue a manual goodwill credit
+POST {{baseUrl}}/api/v1/admin/billing/organizations/{{orgId}}/credits
+x-platform-key: {{platformAdminKey}}
+Content-Type: application/json
+
+{ "amount": 100, "reason": "Support goodwill credit" }

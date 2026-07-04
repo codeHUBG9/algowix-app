@@ -1,0 +1,154 @@
+@email = subscriptions.{{$guid}}@example.com
+@password = Passw0rd123
+
+### Register a fresh org — auth.repository auto-subscribes new orgs to CRM's
+### free plan (TRIALING).
+# @name register
+POST {{baseUrl}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "firstName": "Subscription",
+  "lastName": "Tester",
+  "email": "{{email}}",
+  "password": "{{password}}",
+  "organizationName": "Subscriptions Http Org"
+}
+
+###############################################
+# 1. List / get (12-Subscriptions.md §5)
+###############################################
+
+# @name listSubs
+GET {{baseUrl}}/api/v1/subscriptions
+
+@subId = {{listSubs.response.body.$.data[0].id}}
+
+GET {{baseUrl}}/api/v1/subscriptions/{{subId}}
+
+### Creating a second subscription for a product that already has one — 409
+POST {{baseUrl}}/api/v1/subscriptions
+Content-Type: application/json
+
+{ "productSlug": "crm", "planSlug": "free" }
+
+###############################################
+# 2. Upgrade while still TRIALING — plan swap only, no charge
+# (subscription.service.ts's applyPlanChange short-circuits before payment
+# when nothing's been paid yet)
+###############################################
+
+POST {{baseUrl}}/api/v1/subscriptions/{{subId}}/upgrade
+Content-Type: application/json
+
+{ "newPlanSlug": "growth" }
+
+### planSlug is now "growth", status still TRIALING
+GET {{baseUrl}}/api/v1/subscriptions/{{subId}}
+
+### advanced_reporting is a Growth-only feature — allowed: true
+GET {{baseUrl}}/api/v1/subscriptions/feature-access?product=crm&feature=advanced_reporting
+
+###############################################
+# 3. Pay to activate — reuses the billing checkout + mock-webhook flow
+# (see billing.http for the full checkout walkthrough; this is the minimum
+# needed to get the subscription from TRIALING to ACTIVE for §3/§4 below)
+###############################################
+
+# @name checkout
+POST {{baseUrl}}/api/v1/billing/checkout
+Content-Type: application/json
+
+{ "productSlug": "crm", "planSlug": "growth", "billingCycle": "MONTHLY" }
+
+@orderId = {{checkout.response.body.$.data.orderId}}
+
+# @name signPayment
+POST {{baseUrl}}/api/v1/dev/billing/sign-mock-webhook
+Content-Type: application/json
+
+{ "event": "payment.captured", "orderId": "{{orderId}}" }
+
+POST {{baseUrl}}/webhooks/mock
+Content-Type: application/json
+x-mock-signature: {{signPayment.response.body.$.data.headers.x-mock-signature}}
+x-mock-timestamp: {{signPayment.response.body.$.data.headers.x-mock-timestamp}}
+
+{{signPayment.response.body.$.data.rawBody}}
+
+### status is now ACTIVE
+GET {{baseUrl}}/api/v1/subscriptions/{{subId}}
+
+###############################################
+# 4. Downgrade an ACTIVE subscription — prorated. Free's price (0) is less
+# than Growth's, so the proration formula yields a negative "charge" — the
+# excess becomes a Credit rather than a payment, and the $0 invoice is
+# marked PAID immediately (no gateway round-trip needed).
+###############################################
+
+POST {{baseUrl}}/api/v1/subscriptions/{{subId}}/downgrade
+Content-Type: application/json
+
+{ "newPlanSlug": "free" }
+
+### Back on the Free plan, still ACTIVE
+GET {{baseUrl}}/api/v1/subscriptions/{{subId}}
+
+### advanced_reporting no longer available on Free — allowed: false
+GET {{baseUrl}}/api/v1/subscriptions/feature-access?product=crm&feature=advanced_reporting
+
+### Downgrading again to the same plan — 409 "Already on this plan"
+POST {{baseUrl}}/api/v1/subscriptions/{{subId}}/downgrade
+Content-Type: application/json
+
+{ "newPlanSlug": "free" }
+
+### Plan-change history — shows subscription.upgraded then subscription.downgraded
+GET {{baseUrl}}/api/v1/subscriptions/{{subId}}/history
+
+###############################################
+# 5. Seats — bounded by the (now current) Free plan's maxSeats (2)
+###############################################
+
+### Within the limit
+POST {{baseUrl}}/api/v1/subscriptions/{{subId}}/seats
+Content-Type: application/json
+
+{ "seatCount": 2 }
+
+### Exceeds Free's maxSeats — 422
+POST {{baseUrl}}/api/v1/subscriptions/{{subId}}/seats
+Content-Type: application/json
+
+{ "seatCount": 999 }
+
+###############################################
+# 6. Cancel / reactivate
+###############################################
+
+POST {{baseUrl}}/api/v1/subscriptions/{{subId}}/cancel
+Content-Type: application/json
+
+{ "immediately": true }
+
+### CANCELLED is terminal in this lifecycle — 409
+POST {{baseUrl}}/api/v1/subscriptions/{{subId}}/reactivate
+
+### Feature access on a cancelled subscription — allowed: false, SUBSCRIPTION_CANCELLED
+GET {{baseUrl}}/api/v1/subscriptions/feature-access?product=crm&feature=advanced_reporting
+
+###############################################
+# 7. Admin (platform-key gated) — trial jobs, no real cron in this environment
+###############################################
+
+### Wrong platform key — 401
+POST {{baseUrl}}/api/v1/admin/subscriptions/run-trial-expiry
+x-platform-key: not-the-real-key
+
+### 0 processed — nothing's actually past its trial+grace period in this fresh run
+POST {{baseUrl}}/api/v1/admin/subscriptions/run-trial-expiry
+x-platform-key: {{platformAdminKey}}
+
+### 0 sent — no subscription's trialEndsAt lines up with a warning day right now
+POST {{baseUrl}}/api/v1/admin/subscriptions/send-trial-warnings
+x-platform-key: {{platformAdminKey}}

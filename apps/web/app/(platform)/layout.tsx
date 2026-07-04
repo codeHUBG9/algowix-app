@@ -17,6 +17,12 @@ export default function PlatformLayout({ children }: { children: React.ReactNode
             <a href="/dashboard/members" className="hover:text-slate-900">
               Members
             </a>
+            <a href="/dashboard/products" className="hover:text-slate-900">
+              Products
+            </a>
+            <a href="/dashboard/billing" className="hover:text-slate-900">
+              Billing
+            </a>
             <a href="/dashboard/settings" className="hover:text-slate-900">
               Settings
             </a>

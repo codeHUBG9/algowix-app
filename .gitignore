@@ -18,6 +18,7 @@ Thumbs.db
 
 apps/server/prisma/generated/
 apps/server/keys/*.pem
+apps/server/storage/
 
 apps/e2e/test-results/
 apps/e2e/playwright-report/

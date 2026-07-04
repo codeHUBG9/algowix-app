@@ -1,0 +1,133 @@
+@email = product-int.{{$guid}}@example.com
+@password = Passw0rd123
+
+### Register a fresh org — auth.repository auto-subscribes new orgs to CRM's
+### free plan (TRIALING), so this org is a ready-made fixture for subscription
+### status checks below without any extra setup.
+# @name register
+POST {{baseUrl}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "firstName": "Product",
+  "lastName": "Tester",
+  "email": "{{email}}",
+  "password": "{{password}}",
+  "organizationName": "Product Integration Http Org"
+}
+
+@orgId = {{register.response.body.$.data.organization.id}}
+
+###############################################
+# 1. Product Registry (09-Product-Integration.md §2)
+###############################################
+
+### Public catalog, authenticated — CRM should show subscription: TRIALING
+GET {{baseUrl}}/api/v1/products
+
+### Public catalog, unauthenticated — no session cookie, subscription omitted (null)
+GET {{baseUrl}}/api/v1/products
+Cookie:
+
+### Single product detail
+GET {{baseUrl}}/api/v1/products/crm
+
+### Unknown slug — 404
+GET {{baseUrl}}/api/v1/products/does-not-exist
+
+### Plans for a product
+GET {{baseUrl}}/api/v1/products/crm/plans
+
+### Inactive/non-public product (Inventory, seeded isActive: false) — 404 from the public route
+GET {{baseUrl}}/api/v1/products/inventory
+
+###############################################
+# 2. Product Health Monitoring (§6) — admin-triggered, no real cron
+###############################################
+
+### Wrong platform key — 401
+GET {{baseUrl}}/api/v1/admin/products
+x-platform-key: not-the-real-key
+
+### List all products with health fields
+GET {{baseUrl}}/api/v1/admin/products
+x-platform-key: {{platformAdminKey}}
+
+### Trigger a health check against CRM — baseUrl points at a real domain that
+### doesn't run our contract API, so this is expected to fail and record
+### healthStatus: "down", consecutiveFailures: 1+ (proves the failure path).
+POST {{baseUrl}}/api/v1/admin/products/crm/health-check
+x-platform-key: {{platformAdminKey}}
+
+### Confirm the health fields updated
+GET {{baseUrl}}/api/v1/admin/products
+x-platform-key: {{platformAdminKey}}
+
+### Unknown product slug — 404
+POST {{baseUrl}}/api/v1/admin/products/does-not-exist/health-check
+x-platform-key: {{platformAdminKey}}
+
+###############################################
+# 3. Internal HMAC signing round-trip (utils/internalKey.ts)
+###############################################
+
+### Sign a notification payload with the real server secret (dev/test-only helper)
+# @name signedNotification
+POST {{baseUrl}}/api/v1/dev/sign-internal-key
+Content-Type: application/json
+
+{
+  "payload": {
+    "organizationId": "{{orgId}}",
+    "userId": "{{register.response.body.$.data.user.id}}",
+    "type": "deal.won",
+    "title": "Deal Won: $50,000 contract",
+    "body": "A product pushed this notification via the signed contract"
+  }
+}
+
+### Push the notification — valid signature, should succeed (201)
+POST {{baseUrl}}/api/internal/notifications
+Content-Type: application/json
+platform-internal-key: {{signedNotification.response.body.$.data.signature}}
+platform-internal-timestamp: {{signedNotification.response.body.$.data.timestamp}}
+
+{{signedNotification.response.body.$.data.bodyStr}}
+
+### Same body, missing headers — 401
+POST {{baseUrl}}/api/internal/notifications
+Content-Type: application/json
+
+{{signedNotification.response.body.$.data.bodyStr}}
+
+### Same body, tampered signature (flip one character) — 401
+POST {{baseUrl}}/api/internal/notifications
+Content-Type: application/json
+platform-internal-key: 0000000000000000000000000000000000000000000000000000000000000000
+platform-internal-timestamp: {{signedNotification.response.body.$.data.timestamp}}
+
+{{signedNotification.response.body.$.data.bodyStr}}
+
+### Sign an audit event payload
+# @name signedAudit
+POST {{baseUrl}}/api/v1/dev/sign-internal-key
+Content-Type: application/json
+
+{
+  "payload": {
+    "organizationId": "{{orgId}}",
+    "action": "crm.contact.deleted",
+    "resource": "Contact",
+    "resourceId": "contact-123",
+    "before": { "name": "John Doe" },
+    "after": null
+  }
+}
+
+### Push the audit event — valid signature, should succeed (201)
+POST {{baseUrl}}/api/internal/audit
+Content-Type: application/json
+platform-internal-key: {{signedAudit.response.body.$.data.signature}}
+platform-internal-timestamp: {{signedAudit.response.body.$.data.timestamp}}
+
+{{signedAudit.response.body.$.data.bodyStr}}

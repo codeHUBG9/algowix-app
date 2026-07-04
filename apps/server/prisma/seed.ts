@@ -11,6 +11,9 @@ const permissions = [
   { resource: "users", action: "remove", scope: "org" },
   { resource: "roles", action: "read", scope: "org" },
   { resource: "roles", action: "create", scope: "org" },
+  { resource: "roles", action: "update", scope: "org" },
+  { resource: "roles", action: "delete", scope: "org" },
+  { resource: "roles", action: "assign", scope: "org" },
   { resource: "billing", action: "read", scope: "org" },
   { resource: "billing", action: "manage", scope: "org" },
   { resource: "subscriptions", action: "read", scope: "org" },
@@ -127,17 +130,49 @@ async function main() {
     },
   });
 
+  // 12-Subscriptions.md §2 TrialConfig — shared shape for both plans below.
+  const trialConfig = (defaultOnExpiry: "SUSPEND" | "DOWNGRADE_TO_FREE", requiresCreditCard: boolean) =>
+    JSON.stringify({
+      duration: 14,
+      requiresCreditCard,
+      allowedFeatures: ["contacts", "deals"],
+      trialEndActions: { gracePeriodDays: 3, sendWarningDays: [7, 3, 1], defaultOnExpiry },
+    });
+
+  // update mirrors create for maxSeats/trialConfig — this row already existed
+  // from the 07/08 seed run, before those columns existed, so an empty
+  // `update: {}` (this file's usual "don't touch what's already there"
+  // convention) would silently leave the pre-existing row's maxSeats/trialConfig null forever.
+  const freePlanFields = {
+    monthlyPrice: 0,
+    maxSeats: 2,
+    trialDays: 14,
+    features: JSON.stringify(["2 users", "1,000 contacts"]),
+    limits: JSON.stringify({ contacts: 1000, users: 2 }),
+    trialConfig: trialConfig("SUSPEND", false),
+  };
   await prisma.productPlan.upsert({
     where: { productId_slug: { productId: crm.id, slug: "free" } },
+    update: freePlanFields,
+    create: { productId: crm.id, name: "Free", slug: "free", ...freePlanFields },
+  });
+
+  console.log("Seeding CRM Growth plan (paid — gives upgrade/downgrade something to target)...");
+  await prisma.productPlan.upsert({
+    where: { productId_slug: { productId: crm.id, slug: "growth" } },
     update: {},
     create: {
       productId: crm.id,
-      name: "Free",
-      slug: "free",
-      monthlyPrice: 0,
+      name: "Growth",
+      slug: "growth",
+      monthlyPrice: 999,
+      annualPrice: 9990,
+      maxSeats: 10,
       trialDays: 14,
-      features: JSON.stringify(["2 users", "1,000 contacts"]),
-      limits: JSON.stringify({ contacts: 1000, users: 2 }),
+      features: JSON.stringify(["10 users", "25,000 contacts", "advanced_reporting"]),
+      limits: JSON.stringify({ contacts: 25000, users: 10 }),
+      trialConfig: trialConfig("SUSPEND", true),
+      sortOrder: 1,
     },
   });
 
@@ -152,6 +187,21 @@ async function main() {
       baseUrl: "https://inventory.algowix.com",
       category: "Operations",
       isActive: false,
+    },
+  });
+
+  console.log("Seeding demo coupon...");
+  await prisma.coupon.upsert({
+    where: { code: "LAUNCH50" },
+    update: {},
+    create: {
+      code: "LAUNCH50",
+      type: "PERCENTAGE",
+      value: 50,
+      appliesTo: "FIRST_INVOICE",
+      maxUses: 100,
+      validFrom: new Date("2026-01-01T00:00:00Z"),
+      validUntil: new Date("2027-01-01T00:00:00Z"),
     },
   });
 

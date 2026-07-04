@@ -15,6 +15,28 @@ const envSchema = z.object({
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().default(30),
   PLATFORM_ADMIN_KEY: z.string().default("dev-platform-admin-key-change-me"),
   PROVISION_RETRY_DELAYS_MS: z.string().default("60000,300000,900000"),
+  // 09-Product-Integration.md §4 — shared HMAC secret for platform<->product
+  // server-to-server calls. One secret for all products for now (no Azure
+  // Key Vault in this environment); a real deployment would issue one per
+  // product and rotate quarterly per the doc.
+  PRODUCT_INTERNAL_SECRET: z.string().default("dev-product-internal-secret-change-me"),
+  // 11-Billing.md §2 — real gateway credentials. Left unset in this environment
+  // (no merchant account); gateway/index.ts falls back to MockGateway whenever
+  // the relevant pair is absent, so the checkout/webhook flow still works end
+  // to end without them.
+  RAZORPAY_KEY_ID: z.string().optional(),
+  RAZORPAY_KEY_SECRET: z.string().optional(),
+  RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  // Dev-only signing secret for MockGateway webhook simulation (see
+  // internal.dev.router.ts's /dev/billing/sign-mock-webhook).
+  MOCK_GATEWAY_WEBHOOK_SECRET: z.string().default("dev-mock-gateway-webhook-secret-change-me"),
+  // 11-Billing.md §5 — AlgoWix's own GST registration, used for tax calc.
+  ALGOWIX_GST_NUMBER: z.string().default("27AAAAA0000A1Z5"),
+  ALGOWIX_STATE: z.string().default("MH"),
+  // Invoice PDFs are written to local disk (no Azure Blob in this environment).
+  INVOICE_STORAGE_DIR: z.string().default("./storage/invoices"),
 });
 
 const parsed = envSchema.safeParse(process.env);

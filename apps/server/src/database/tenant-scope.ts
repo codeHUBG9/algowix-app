@@ -10,6 +10,8 @@ import { prisma } from "./prisma.js";
 // Only models that actually exist in this schema and belong to a single
 // tenant are listed. TeamMember is scoped indirectly via its parent Team
 // (it has no organizationId column of its own), so it's deliberately absent.
+// Same reasoning excludes InvoiceLineItem (scoped via its parent Invoice) and
+// Coupon (platform-wide, no organizationId at all) — see 11-Billing.md.
 const TENANT_SCOPED_MODELS = new Set([
   "OrgMembership",
   "OrgInvite",
@@ -22,6 +24,11 @@ const TENANT_SCOPED_MODELS = new Set([
   "Branch",
   "Department",
   "Team",
+  "Invoice",
+  "Payment",
+  "PaymentMethod",
+  "Credit",
+  "CouponRedemption",
 ]);
 
 const READ_AND_BULK_WRITE_OPS = new Set(["findMany", "findFirst", "count", "updateMany", "deleteMany"]);

@@ -131,6 +131,76 @@ export const generalSettingsSchema = z.object({
   dateFormat: z.string().trim().max(20).optional(),
 });
 
+// ============================================================
+// 11-Billing.md / 12-Subscriptions.md
+// ============================================================
+
+export const checkoutSchema = z.object({
+  productSlug: z.string().trim().min(1, "Product is required"),
+  planSlug: z.string().trim().min(1, "Plan is required"),
+  billingCycle: z.enum(["MONTHLY", "ANNUAL"]).default("MONTHLY"),
+  couponCode: z.string().trim().max(50).optional().or(z.literal("")),
+});
+
+export const addPaymentMethodSchema = z.object({
+  gatewayMethodId: z.string().trim().min(1, "Gateway method id is required"),
+  type: z.enum(["CARD", "UPI", "NETBANKING", "SEPA", "ACH"]),
+  brand: z.string().trim().max(30).optional().or(z.literal("")),
+  last4: z.string().trim().length(4).optional().or(z.literal("")),
+  expiryMonth: z.coerce.number().int().min(1).max(12).optional(),
+  expiryYear: z.coerce.number().int().min(2024).max(2100).optional(),
+  isDefault: z.boolean().optional(),
+});
+
+export const validateCouponSchema = z.object({
+  code: z.string().trim().min(1, "Coupon code is required"),
+  productSlug: z.string().trim().optional(),
+});
+
+export const createSubscriptionSchema = z.object({
+  productSlug: z.string().trim().min(1, "Product is required"),
+  planSlug: z.string().trim().min(1, "Plan is required"),
+});
+
+export const upgradeSubscriptionSchema = z.object({
+  newPlanSlug: z.string().trim().min(1, "New plan is required"),
+});
+
+export const downgradeSubscriptionSchema = z.object({
+  newPlanSlug: z.string().trim().min(1, "New plan is required"),
+});
+
+export const updateSeatsSchema = z.object({
+  seatCount: z.coerce.number().int().min(1, "At least 1 seat is required"),
+});
+
+export const cancelSubscriptionSchema = z.object({
+  immediately: z.boolean().optional(),
+  reason: z.string().trim().max(500).optional().or(z.literal("")),
+});
+
+// ============================================================
+// 13-RBAC.md
+// ============================================================
+
+export const createRoleSchema = z.object({
+  name: z.string().trim().min(2, "Name is required").max(100),
+  description: z.string().trim().max(500).optional().or(z.literal("")),
+  permissionIds: z.array(z.string().trim().min(1)).min(1, "Select at least one permission"),
+  productAccess: z.array(z.string().trim().min(1)).optional().default([]),
+});
+
+export const updateRoleSchema = z.object({
+  name: z.string().trim().min(2).max(100).optional(),
+  description: z.string().trim().max(500).optional().or(z.literal("")),
+  permissionIds: z.array(z.string().trim().min(1)).min(1, "Select at least one permission").optional(),
+  productAccess: z.array(z.string().trim().min(1)).optional(),
+});
+
+export const updateMemberRoleSchema = z.object({
+  roleId: z.string().trim().min(1, "Role is required"),
+});
+
 export type RegisterFormInput = z.infer<typeof registerSchema>;
 export type LoginFormInput = z.infer<typeof loginSchema>;
 export type VerifyEmailFormInput = z.infer<typeof verifyEmailSchema>;
@@ -150,3 +220,16 @@ export type BrandingSettingsFormInput = z.infer<typeof brandingSettingsSchema>;
 export type SecuritySettingsFormInput = z.infer<typeof securitySettingsSchema>;
 export type NotificationSettingsFormInput = z.infer<typeof notificationSettingsSchema>;
 export type GeneralSettingsFormInput = z.infer<typeof generalSettingsSchema>;
+
+export type CheckoutFormInput = z.infer<typeof checkoutSchema>;
+export type AddPaymentMethodFormInput = z.infer<typeof addPaymentMethodSchema>;
+export type ValidateCouponFormInput = z.infer<typeof validateCouponSchema>;
+export type CreateSubscriptionFormInput = z.infer<typeof createSubscriptionSchema>;
+export type UpgradeSubscriptionFormInput = z.infer<typeof upgradeSubscriptionSchema>;
+export type DowngradeSubscriptionFormInput = z.infer<typeof downgradeSubscriptionSchema>;
+export type UpdateSeatsFormInput = z.infer<typeof updateSeatsSchema>;
+export type CancelSubscriptionFormInput = z.infer<typeof cancelSubscriptionSchema>;
+
+export type CreateRoleFormInput = z.infer<typeof createRoleSchema>;
+export type UpdateRoleFormInput = z.infer<typeof updateRoleSchema>;
+export type UpdateMemberRoleFormInput = z.infer<typeof updateMemberRoleSchema>;

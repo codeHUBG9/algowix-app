@@ -1,0 +1,164 @@
+@email = rbac.{{$guid}}@example.com
+@password = Passw0rd123
+
+### Register a fresh org (Owner, STARTER plan by default)
+# @name register
+POST {{baseUrl}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "firstName": "Rbac",
+  "lastName": "Owner",
+  "email": "{{email}}",
+  "password": "{{password}}",
+  "organizationName": "RBAC Http Org"
+}
+
+@orgId = {{register.response.body.$.data.organization.id}}
+
+###############################################
+# 1. Roles & Permissions catalog (13-RBAC.md §7/§8)
+###############################################
+
+### List roles — the 5 seeded system roles
+# @name roles
+GET {{baseUrl}}/api/v1/roles
+
+@adminRoleId = {{roles.response.body.$.data[?(@.name=='Admin')].id}}
+
+### Flat permission list
+GET {{baseUrl}}/api/v1/permissions
+
+### Grouped permission catalog (feeds the permissions-assignment UI)
+GET {{baseUrl}}/api/v1/permissions/catalog
+
+###############################################
+# 2. Custom roles are gated behind a Growth+ plan (§4)
+###############################################
+
+### On the default STARTER plan, creating a custom role should 403
+POST {{baseUrl}}/api/v1/roles
+Content-Type: application/json
+
+{
+  "name": "Support Rep",
+  "permissionIds": [],
+  "productAccess": []
+}
+
+### [dev/test only] bump the org to GROWTH — no real flow mutates Organization.plan yet
+POST {{baseUrl}}/api/v1/dev/set-org-plan
+Content-Type: application/json
+
+{
+  "organizationId": "{{orgId}}",
+  "plan": "GROWTH"
+}
+
+### plan is baked into the JWT — re-login to pick up the upgrade
+# @name relogin
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### A permission id to build a role with (organization.read)
+# @name permissions
+GET {{baseUrl}}/api/v1/permissions
+
+@orgReadId = {{permissions.response.body.$.data[?(@.key=='organization.read')].id}}
+@usersReadId = {{permissions.response.body.$.data[?(@.key=='users.read')].id}}
+
+### Now creating a custom role should succeed
+# @name createRole
+POST {{baseUrl}}/api/v1/roles
+Content-Type: application/json
+
+{
+  "name": "Support Rep",
+  "description": "Read-only support access",
+  "permissionIds": ["{{orgReadId}}", "{{usersReadId}}"],
+  "productAccess": []
+}
+
+@supportRoleId = {{createRole.response.body.$.data.id}}
+
+### Duplicate name should 409
+POST {{baseUrl}}/api/v1/roles
+Content-Type: application/json
+
+{
+  "name": "Support Rep",
+  "permissionIds": ["{{orgReadId}}"],
+  "productAccess": []
+}
+
+### Fetch the role detail
+GET {{baseUrl}}/api/v1/roles/{{supportRoleId}}
+
+### Update it (rename + trim to one permission)
+PUT {{baseUrl}}/api/v1/roles/{{supportRoleId}}
+Content-Type: application/json
+
+{
+  "name": "Support Rep (read-only)",
+  "permissionIds": ["{{orgReadId}}"]
+}
+
+### System roles cannot be modified — 403
+PUT {{baseUrl}}/api/v1/roles/{{adminRoleId}}
+Content-Type: application/json
+
+{
+  "name": "Renamed Admin"
+}
+
+### System roles cannot be deleted — 403
+DELETE {{baseUrl}}/api/v1/roles/{{adminRoleId}}
+
+###############################################
+# 3. Product-level access control (§5) + SSO launch token (04-System-Design.md §4.2)
+###############################################
+
+### Every new org auto-subscribes to CRM's free plan (TRIALING) — launch should succeed
+GET {{baseUrl}}/api/v1/products/crm/launch
+
+### Inventory is seeded isActive: false — no real listing to launch, 404
+GET {{baseUrl}}/api/v1/products/inventory/launch
+
+### A role restricted to Inventory only (excludes CRM) — Level 1 access control
+# @name restrictedRole
+POST {{baseUrl}}/api/v1/roles
+Content-Type: application/json
+
+{
+  "name": "Inventory Only",
+  "permissionIds": ["{{orgReadId}}"],
+  "productAccess": ["inventory"]
+}
+
+@restrictedRoleId = {{restrictedRole.response.body.$.data.id}}
+
+### Invite a member with the restricted role
+# @name restrictedInvite
+POST {{baseUrl}}/api/v1/organizations/{{orgId}}/invite
+Content-Type: application/json
+
+{
+  "email": "rbac.restricted.{{$guid}}@example.com",
+  "roleId": "{{restrictedRoleId}}"
+}
+
+###############################################
+# 4. Deleting an unused custom role succeeds (§7)
+###############################################
+
+### Support Rep has no members on it yet — deletes cleanly
+DELETE {{baseUrl}}/api/v1/roles/{{supportRoleId}}
+
+### Deleting a role that still has active members should 409 (see rbac.spec.ts
+### for the full reassign-then-delete walkthrough, which needs a second identity)
+DELETE {{baseUrl}}/api/v1/roles/{{restrictedRoleId}}

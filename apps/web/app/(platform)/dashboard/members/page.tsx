@@ -5,8 +5,10 @@ import {
   useMembers,
   useInvites,
   useUpdateMemberStatus,
+  useUpdateMemberRole,
   useRemoveMember,
   useCancelInvite,
+  useOrgRoles,
   type MemberFilters,
 } from "../../../../lib/hooks/use-org-members";
 import { useCurrentSession } from "../../../../lib/hooks/use-current-session";
@@ -27,18 +29,30 @@ export default function MembersPage() {
 
   const { data: members, isLoading } = useMembers(filters);
   const { data: invites } = useInvites();
+  const { data: roles } = useOrgRoles();
   const updateStatus = useUpdateMemberStatus();
+  const updateRole = useUpdateMemberRole();
   const removeMember = useRemoveMember();
   const cancelInvite = useCancelInvite();
 
   const canManage = session?.auth.permissions.includes("users.update") ?? false;
   const canInvite = session?.auth.permissions.includes("users.invite") ?? false;
+  const canAssignRole = session?.auth.permissions.includes("roles.assign") ?? false;
 
   async function onSuspend(userId: string, currentStatus: string) {
     setError(null);
     const nextStatus = currentStatus === "SUSPENDED" ? "ACTIVE" : "SUSPENDED";
     try {
       await updateStatus.mutateAsync({ userId, input: { status: nextStatus } });
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Something went wrong");
+    }
+  }
+
+  async function onChangeRole(userId: string, roleId: string) {
+    setError(null);
+    try {
+      await updateRole.mutateAsync({ userId, input: { roleId } });
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Something went wrong");
     }
@@ -111,11 +125,27 @@ export default function MembersPage() {
                     {m.userId === session?.auth.userId ? " (you)" : ""}
                   </p>
                   <p className="text-slate-500">
-                    {m.email} · {m.role.name}
+                    {m.email}
                     {m.productAccess.length > 0 && ` · ${m.productAccess.join(", ")}`}
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
+                  {canAssignRole && m.userId !== session?.auth.userId && roles ? (
+                    <select
+                      value={m.role.id}
+                      onChange={(e) => onChangeRole(m.userId, e.target.value)}
+                      disabled={updateRole.isPending}
+                      className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                    >
+                      {roles.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-slate-500">{m.role.name}</span>
+                  )}
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[m.status] ?? ""}`}>
                     {m.status}
                   </span>

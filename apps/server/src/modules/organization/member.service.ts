@@ -95,6 +95,45 @@ export const memberService = {
     return toPublicMember(refreshed!, productAccess);
   },
 
+  // 13-RBAC.md §7 — PATCH /organizations/:id/members/:userId/role, gated on
+  // roles.assign at the router. Reuses the same "don't demote the only Owner"
+  // guard updateStatus/remove already enforce, applied to a role *change* away
+  // from Owner rather than a status/removal change.
+  async updateRole(organizationId: string, userId: string, roleId: string, actor: LifecycleActor) {
+    const membership = await memberRepository.findById(organizationId, userId);
+    if (!membership) throw new NotFoundError("Member not found");
+
+    const role = await memberRepository.findRoleForOrg(organizationId, roleId);
+    if (!role) throw new NotFoundError("Role not found");
+
+    if (membership.role.name === "Owner" && role.name !== "Owner") {
+      const ownerCount = await memberRepository.countActiveOwners(organizationId);
+      if (ownerCount <= 1) throw new ConflictError("Cannot change the organization's only Owner's role");
+    }
+
+    await memberRepository.updateRole(organizationId, userId, roleId);
+
+    await memberRepository.writeAuditLog({
+      organizationId,
+      actorId: actor.actorId,
+      actorType: actor.actorType,
+      actorEmail: actor.actorEmail,
+      action: "member.role_changed",
+      resource: "org_membership",
+      resourceId: membership.id,
+      ipAddress: actor.ipAddress,
+      before: JSON.stringify({ roleId: membership.roleId }),
+      after: JSON.stringify({ roleId }),
+      severity: "INFO",
+    });
+
+    invalidateTenantCache(organizationId);
+
+    const refreshed = await memberRepository.findById(organizationId, userId);
+    const productAccess = await memberRepository.listActiveSubscriptionProductSlugs(organizationId);
+    return toPublicMember(refreshed!, productAccess);
+  },
+
   async remove(organizationId: string, userId: string, actor: LifecycleActor) {
     const membership = await memberRepository.findById(organizationId, userId);
     if (!membership) throw new NotFoundError("Member not found");

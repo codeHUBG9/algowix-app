@@ -7,6 +7,7 @@ import type {
   OrgRole,
   InviteMemberFormInput,
   UpdateMemberStatusFormInput,
+  UpdateMemberRoleFormInput,
 } from "@algowix/shared-types";
 import { apiClient } from "../api-client";
 import { useCurrentSession } from "./use-current-session";
@@ -48,6 +49,16 @@ export function useUpdateMemberStatus() {
   return useMutation({
     mutationFn: ({ userId, input }: { userId: string; input: UpdateMemberStatusFormInput }) =>
       apiClient.patch<OrgMember>(`/api/v1/organizations/${orgId}/members/${userId}`, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["org", orgId, "members"] }),
+  });
+}
+
+export function useUpdateMemberRole() {
+  const orgId = useOrgId();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, input }: { userId: string; input: UpdateMemberRoleFormInput }) =>
+      apiClient.patch<OrgMember>(`/api/v1/organizations/${orgId}/members/${userId}/role`, input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["org", orgId, "members"] }),
   });
 }

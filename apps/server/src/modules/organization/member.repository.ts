@@ -41,6 +41,14 @@ export const memberRepository = {
     return tenantScopedClient(organizationId).orgMembership.updateMany({ where: { userId }, data: { status } });
   },
 
+  updateRole(organizationId: string, userId: string, roleId: string) {
+    return tenantScopedClient(organizationId).orgMembership.updateMany({ where: { userId }, data: { roleId } });
+  },
+
+  findRoleForOrg(organizationId: string, roleId: string) {
+    return prisma.role.findFirst({ where: { id: roleId, OR: [{ organizationId }, { organizationId: null, isSystem: true }] } });
+  },
+
   remove(organizationId: string, userId: string) {
     return tenantScopedClient(organizationId).orgMembership.deleteMany({ where: { userId } });
   },

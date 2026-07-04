@@ -53,17 +53,22 @@ model Organization {
   updatedAt            DateTime  @updatedAt
   deletedAt            DateTime?
 
-  memberships   OrgMembership[]
-  invites       OrgInvite[]
-  subscriptions Subscription[]
-  auditLogs     AuditLog[]
-  notifications Notification[]
-  apiKeys       ApiKey[]
-  webhooks      Webhook[]
-  files         FileRecord[]
-  branches      Branch[]
-  departments   Department[]
-  teams         Team[]
+  memberships    OrgMembership[]
+  invites        OrgInvite[]
+  subscriptions  Subscription[]
+  auditLogs      AuditLog[]
+  notifications  Notification[]
+  apiKeys        ApiKey[]
+  webhooks       Webhook[]
+  files          FileRecord[]
+  branches       Branch[]
+  departments    Department[]
+  teams          Team[]
+  invoices       Invoice[]
+  payments       Payment[]
+  paymentMethods PaymentMethod[]
+  credits        Credit[]
+  couponRedemptions CouponRedemption[]
 
   @@map("Organizations")
   @@schema("platform")
@@ -292,11 +297,30 @@ model Role {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  memberships OrgMembership[]
-  permissions RolePermission[]
+  memberships   OrgMembership[]
+  permissions   RolePermission[]
+  productAccess RoleProductAccess[]
 
   @@unique([organizationId, name])
   @@map("Roles")
+  @@schema("platform")
+}
+
+// 13-RBAC.md §5, Level 1 — "can this role touch product X at all". A role with
+// zero rows here is unrestricted (every subscribed product) — restriction is
+// opt-in per role, so introducing this table doesn't retroactively lock out
+// any role/product combo that existed before RBAC's per-product access UI shipped.
+model RoleProductAccess {
+  id        String   @id @default(uuid()) @db.UniqueIdentifier
+  roleId    String   @db.UniqueIdentifier
+  productId String   @db.UniqueIdentifier
+  createdAt DateTime @default(now())
+
+  role    Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, productId])
+  @@map("RoleProductAccess")
   @@schema("platform")
 }
 
@@ -332,24 +356,30 @@ model RolePermission {
 // ============================================================
 
 model Product {
-  id               String   @id @default(uuid()) @db.UniqueIdentifier
-  slug             String   @unique @db.NVarChar(50)
-  name             String   @db.NVarChar(100)
-  description      String?  @db.NVarChar(1000)
-  shortDescription String?  @db.NVarChar(200)
-  logoUrl          String?  @db.NVarChar(500)
-  baseUrl          String   @db.NVarChar(500)
-  contractApiPath  String   @default("/api/platform") @db.NVarChar(100)
-  category         String   @db.NVarChar(100)
-  isActive         Boolean  @default(true)
-  isPublic         Boolean  @default(true)
-  isBeta           Boolean  @default(false)
-  sortOrder        Int      @default(0)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                  String    @id @default(uuid()) @db.UniqueIdentifier
+  slug                String    @unique @db.NVarChar(50)
+  name                String    @db.NVarChar(100)
+  description         String?   @db.NVarChar(1000)
+  shortDescription    String?   @db.NVarChar(200)
+  logoUrl             String?   @db.NVarChar(500)
+  baseUrl             String    @db.NVarChar(500)
+  contractApiPath     String    @default("/api/platform") @db.NVarChar(100)
+  category            String    @db.NVarChar(100)
+  isActive            Boolean   @default(true)
+  isPublic            Boolean   @default(true)
+  isBeta              Boolean   @default(false)
+  sortOrder           Int       @default(0)
+  healthStatus        String    @default("unknown") @db.NVarChar(20)
+  version             String?   @db.NVarChar(50)
+  lastHealthCheckAt   DateTime?
+  lastHealthSuccessAt DateTime?
+  consecutiveFailures Int       @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   plans         ProductPlan[]
   subscriptions Subscription[]
+  roleAccess    RoleProductAccess[]
 
   @@map("Products")
   @@schema("platform")
@@ -369,6 +399,10 @@ model ProductPlan {
   maxSeats     Int?
   features     String   @db.NVarChar(Max)
   limits       String   @db.NVarChar(Max)
+  // 12-Subscriptions.md §2 TrialConfig — JSON: requiresCreditCard, allowedFeatures,
+  // gracePeriodDays, sendWarningDays, defaultOnExpiry. Same string-JSON convention
+  // as features/limits above (SQL Server has no native JSON column type here).
+  trialConfig  String?  @db.NVarChar(Max)
   sortOrder    Int      @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -395,6 +429,11 @@ model Subscription {
   currentPeriodEnd   DateTime
   cancelAtPeriodEnd  Boolean   @default(false)
   cancelledAt        DateTime?
+  // 12-Subscriptions.md §1/§6 — dunning state, tracked here so the admin-triggered
+  // runDunningJob (no cron in this environment) is idempotent per calendar day.
+  paymentFailedAt     DateTime?
+  dunningStage        Int       @default(0)
+  lastDunningActionAt DateTime?
   provisioningStatus String    @default("PENDING") @db.NVarChar(20)
   provisionAttempts  Int       @default(0)
   providerTenantId   String?   @db.NVarChar(255)
@@ -408,6 +447,7 @@ model Subscription {
   organization Organization @relation(fields: [organizationId], references: [id])
   product      Product      @relation(fields: [productId], references: [id])
   plan         ProductPlan  @relation(fields: [planId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  invoices     Invoice[]
 
   @@unique([organizationId, productId])
   @@map("Subscriptions")
@@ -473,7 +513,7 @@ model ApiKey {
   organizationId String    @db.UniqueIdentifier
   name           String    @db.NVarChar(100)
   keyHash        String    @unique @db.NVarChar(255)
-  keyPrefix      String    @db.NVarChar(10)
+  keyPrefix      String    @db.NVarChar(20)
   scopes         String    @db.NVarChar(Max)
   lastUsedAt     DateTime?
   expiresAt      DateTime?
@@ -552,6 +592,175 @@ model FileRecord {
 }
 
 // ============================================================
+// BILLING & SUBSCRIPTIONS — 11-Billing.md / 12-Subscriptions.md
+// ============================================================
+
+// Backs sequential invoice numbering (AWX-{YEAR}-{seq}) via a Serializable
+// transaction in invoice-number.service.ts, instead of scanning Invoice rows.
+model InvoiceSequence {
+  year       Int @id
+  lastNumber Int @default(0)
+
+  @@map("InvoiceSequences")
+  @@schema("billing")
+}
+
+model Invoice {
+  id             String    @id @default(uuid()) @db.UniqueIdentifier
+  organizationId String    @db.UniqueIdentifier
+  subscriptionId String    @db.UniqueIdentifier
+  invoiceNumber  String    @unique @db.NVarChar(30)
+  status         String    @default("DRAFT") @db.NVarChar(20)
+  currency       String    @default("INR") @db.NChar(3)
+  billingCycle   String    @db.NVarChar(20)
+  subtotal       Decimal   @db.Decimal(12, 2)
+  discountAmount Decimal   @default(0) @db.Decimal(12, 2)
+  creditApplied  Decimal   @default(0) @db.Decimal(12, 2)
+  isIGST         Boolean   @default(false)
+  cgstAmount     Decimal   @default(0) @db.Decimal(12, 2)
+  sgstAmount     Decimal   @default(0) @db.Decimal(12, 2)
+  igstAmount     Decimal   @default(0) @db.Decimal(12, 2)
+  taxAmount      Decimal   @default(0) @db.Decimal(12, 2)
+  total          Decimal   @db.Decimal(12, 2)
+  amountDue      Decimal   @db.Decimal(12, 2)
+  gatewayProvider String   @db.NVarChar(20)
+  gatewayOrderId String?   @db.NVarChar(255)
+  periodStart    DateTime
+  periodEnd      DateTime
+  dueDate        DateTime
+  paidAt         DateTime?
+  voidedAt       DateTime?
+  pdfUrl         String?   @db.NVarChar(500)
+  notes          String?   @db.NVarChar(1000)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  // NoAction: Subscription already cascades to Organization, so an Invoice->Subscription
+  // cascade would create a second path to Organization — same fix as Subscription.plan.
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lineItems    InvoiceLineItem[]
+  payments     Payment[]
+  couponRedemptions CouponRedemption[]
+
+  @@map("Invoices")
+  @@schema("billing")
+}
+
+model InvoiceLineItem {
+  id          String   @id @default(uuid()) @db.UniqueIdentifier
+  invoiceId   String   @db.UniqueIdentifier
+  description String   @db.NVarChar(500)
+  quantity    Int      @default(1)
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  amount      Decimal  @db.Decimal(12, 2)
+  createdAt   DateTime @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@map("InvoiceLineItems")
+  @@schema("billing")
+}
+
+model Payment {
+  id                String    @id @default(uuid()) @db.UniqueIdentifier
+  organizationId    String    @db.UniqueIdentifier
+  invoiceId         String    @db.UniqueIdentifier
+  gatewayProvider   String    @db.NVarChar(20)
+  gatewayPaymentId  String?   @db.NVarChar(255)
+  gatewayOrderId    String?   @db.NVarChar(255)
+  amount            Decimal   @db.Decimal(12, 2)
+  currency          String    @default("INR") @db.NChar(3)
+  status            String    @default("PENDING") @db.NVarChar(20)
+  method            String?   @db.NVarChar(30)
+  failureReason     String?   @db.NVarChar(500)
+  refundedAmount    Decimal   @default(0) @db.Decimal(12, 2)
+  paidAt            DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  // NoAction: same multi-path reason as Invoice.subscription above.
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("Payments")
+  @@schema("billing")
+}
+
+model PaymentMethod {
+  id               String    @id @default(uuid()) @db.UniqueIdentifier
+  organizationId   String    @db.UniqueIdentifier
+  gatewayProvider  String    @db.NVarChar(20)
+  gatewayMethodId  String    @db.NVarChar(255)
+  type             String    @db.NVarChar(20)
+  brand            String?   @db.NVarChar(30)
+  last4            String?   @db.NChar(4)
+  expiryMonth      Int?
+  expiryYear       Int?
+  isDefault        Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("PaymentMethods")
+  @@schema("billing")
+}
+
+model Credit {
+  id              String    @id @default(uuid()) @db.UniqueIdentifier
+  organizationId  String    @db.UniqueIdentifier
+  amount          Decimal   @db.Decimal(12, 2)
+  remainingAmount Decimal   @db.Decimal(12, 2)
+  reason          String    @db.NVarChar(255)
+  expiresAt       DateTime
+  createdAt       DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("Credits")
+  @@schema("billing")
+}
+
+// Platform-wide — no organizationId, applies across all tenants.
+model Coupon {
+  id                String    @id @default(uuid()) @db.UniqueIdentifier
+  code              String    @unique @db.NVarChar(50)
+  type              String    @db.NVarChar(20)
+  value             Decimal   @db.Decimal(10, 2)
+  appliesTo         String    @default("ALL") @db.NVarChar(20)
+  appliesToProducts String?   @db.NVarChar(Max)
+  maxUses           Int?
+  currentUses       Int       @default(0)
+  minOrderAmount    Decimal?  @db.Decimal(12, 2)
+  validFrom         DateTime
+  validUntil        DateTime
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  redemptions CouponRedemption[]
+
+  @@map("Coupons")
+  @@schema("billing")
+}
+
+model CouponRedemption {
+  id             String   @id @default(uuid()) @db.UniqueIdentifier
+  couponId       String   @db.UniqueIdentifier
+  organizationId String   @db.UniqueIdentifier
+  invoiceId      String   @db.UniqueIdentifier
+  createdAt      DateTime @default(now())
+
+  coupon       Coupon       @relation(fields: [couponId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+  // NoAction: same multi-path reason as Invoice.subscription above.
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("CouponRedemptions")
+  @@schema("billing")
+}
+
+// ============================================================
 // ENUM-LIKE STRING FIELDS
 // ============================================================
 // SQL Server has no native enum type, so Prisma enums are unsupported
@@ -568,9 +777,23 @@ model FileRecord {
 //   OrgInvite.status       -> PENDING | ACCEPTED | EXPIRED | CANCELLED
 //   TeamMember.role        -> LEAD | MEMBER | OBSERVER
 //                             (see 08-Organization-Management.md §5)
-//   Subscription.status    -> TRIALING | ACTIVE | PAST_DUE | CANCELLED | PAUSED | INCOMPLETE
+//   Subscription.status    -> TRIALING | ACTIVE | PAST_DUE | SUSPENDED | CANCELLED | INCOMPLETE
+//                             (12-Subscriptions.md §1 is authoritative for this phase;
+//                             supersedes this comment's earlier "PAUSED" placeholder)
 //   Subscription.billingCycle -> MONTHLY | ANNUAL
 //   Subscription.provisioningStatus -> PENDING | PROVISIONED | FAILED
 //   Notification.channel  -> IN_APP | EMAIL | SMS | PUSH
 //   AuditLog.severity      -> INFO | WARNING | CRITICAL
 //   AuditLog.actorType     -> USER | SYSTEM | PLATFORM_ADMIN
+//   Product.healthStatus  -> unknown | ok | degraded | down
+//                             (see 09-Product-Integration.md §6)
+//   Invoice.status         -> DRAFT | OPEN | PAID | VOID
+//   Invoice.gatewayProvider / Payment.gatewayProvider -> RAZORPAY | STRIPE | MOCK
+//                             (see 11-Billing.md §2; MOCK is a dev-only stand-in
+//                             used when no real gateway keys are configured)
+//   Payment.status         -> PENDING | SUCCEEDED | FAILED | REFUNDED | PARTIALLY_REFUNDED
+//   PaymentMethod.type     -> CARD | UPI | NETBANKING | SEPA | ACH
+//   Coupon.type            -> PERCENTAGE | FIXED_AMOUNT
+//   Coupon.appliesTo       -> ALL | FIRST_INVOICE | PRODUCTS
+//                             (see 11-Billing.md §6; PRODUCTS uses appliesToProducts,
+//                             a JSON array of product slugs)

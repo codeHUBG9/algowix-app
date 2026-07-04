@@ -4,6 +4,7 @@ import { authenticate } from "../../middleware/authenticate.js";
 import { resolveTenantContext } from "../../middleware/tenantContext.js";
 import { requireOwnOrganization } from "../../middleware/requireOwnOrganization.js";
 import { requirePermission } from "../../middleware/requirePermission.js";
+import { tieredRateLimiter } from "../../middleware/rateLimiter.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { branchController } from "./branch.controller.js";
 import { departmentController } from "./department.controller.js";
@@ -13,12 +14,13 @@ import { inviteController } from "./invite.controller.js";
 import { settingsController } from "./settings.controller.js";
 import { roleController } from "./role.controller.js";
 import { organizationProfileController } from "./organization-profile.controller.js";
+import { apiKeyController } from "../developer/api-key.controller.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 1024 * 1024 } });
 
 export const organizationRouter = Router({ mergeParams: true });
 
-organizationRouter.use("/:id", authenticate, resolveTenantContext, requireOwnOrganization);
+organizationRouter.use("/:id", authenticate, tieredRateLimiter, resolveTenantContext, requireOwnOrganization);
 
 // Organization profile — §1 / §10 (thin aliases over tenantService; see organization-profile.controller.ts)
 organizationRouter.get(
@@ -98,6 +100,11 @@ organizationRouter.patch(
   requirePermission("users.update"),
   asyncHandler(memberController.updateStatus)
 );
+organizationRouter.patch(
+  "/:id/members/:userId/role",
+  requirePermission("roles.assign"),
+  asyncHandler(memberController.updateRole)
+);
 organizationRouter.delete(
   "/:id/members/:userId",
   requirePermission("users.remove"),
@@ -159,4 +166,48 @@ organizationRouter.put(
   "/:id/settings/notifications",
   requirePermission("organization.update"),
   asyncHandler(settingsController.updateNotifications)
+);
+
+// API Keys — 10-API-Gateway.md §5 (developer API authentication)
+/**
+ * @openapi
+ * /organizations/{id}/api-keys:
+ *   get:
+ *     summary: List API keys for an organization
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: API key list (never includes the raw key or its hash)
+ *   post:
+ *     summary: Create an API key
+ *     description: Returns the raw key exactly once — it cannot be retrieved again after this response.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       201:
+ *         description: Created key, including rawKey
+ */
+organizationRouter.get(
+  "/:id/api-keys",
+  requirePermission("api_keys.manage"),
+  asyncHandler(apiKeyController.list)
+);
+organizationRouter.post(
+  "/:id/api-keys",
+  requirePermission("api_keys.manage"),
+  asyncHandler(apiKeyController.create)
+);
+/**
+ * @openapi
+ * /organizations/{id}/api-keys/{keyId}:
+ *   delete:
+ *     summary: Revoke an API key
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Revoked
+ */
+organizationRouter.delete(
+  "/:id/api-keys/:keyId",
+  requirePermission("api_keys.manage"),
+  asyncHandler(apiKeyController.revoke)
 );

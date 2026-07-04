@@ -1,0 +1,91 @@
+@email = api-gw.{{$guid}}@example.com
+@password = Passw0rd123
+
+### Register a fresh org (owner has api_keys.manage per seed.ts)
+# @name register
+POST {{baseUrl}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "firstName": "Gateway",
+  "lastName": "Tester",
+  "email": "{{email}}",
+  "password": "{{password}}",
+  "organizationName": "Api Gateway Http Org"
+}
+
+@orgId = {{register.response.body.$.data.organization.id}}
+
+###############################################
+# 1. Response caching (10-API-Gateway.md §6)
+###############################################
+
+### Product catalog carries a Cache-Control header — inspect response headers
+GET {{baseUrl}}/api/v1/products
+
+### JWKS carries a longer-TTL Cache-Control header
+GET {{baseUrl}}/.well-known/jwks.json
+
+###############################################
+# 2. Plan-tiered rate limiting (§3) — headers only, ceiling itself is
+# 2000/min in dev (see rateLimiter.ts), so triggering a real 429 here isn't
+# practical from a handful of manual requests.
+###############################################
+
+### Authenticated request against a tiered route — inspect RateLimit-* headers
+GET {{baseUrl}}/api/v1/tenants/me
+
+###############################################
+# 3. API Key management + authentication (§5)
+###############################################
+
+### Create an API key with read-only scopes
+# @name createKey
+POST {{baseUrl}}/api/v1/organizations/{{orgId}}/api-keys
+Content-Type: application/json
+
+{
+  "name": "CI pipeline",
+  "scopes": ["organization.read", "users.read"]
+}
+
+@rawKey = {{createKey.response.body.$.data.rawKey}}
+@keyId = {{createKey.response.body.$.data.id}}
+
+### List keys — rawKey/hash never appear here
+GET {{baseUrl}}/api/v1/organizations/{{orgId}}/api-keys
+
+### Use the API key (no cookie) to call an org-scoped, permission-gated route
+GET {{baseUrl}}/api/v1/organizations/{{orgId}}
+Authorization: ApiKey {{rawKey}}
+Cookie:
+
+### Same key, but a scope it wasn't granted (organization.update) — 403
+PUT {{baseUrl}}/api/v1/organizations/{{orgId}}
+Authorization: ApiKey {{rawKey}}
+Cookie:
+Content-Type: application/json
+
+{
+  "name": "Should be forbidden"
+}
+
+### Garbage key — 401
+GET {{baseUrl}}/api/v1/organizations/{{orgId}}
+Authorization: ApiKey awx_live_not_a_real_key
+Cookie:
+
+### Revoke the key
+DELETE {{baseUrl}}/api/v1/organizations/{{orgId}}/api-keys/{{keyId}}
+
+### Same key, now revoked — 401
+GET {{baseUrl}}/api/v1/organizations/{{orgId}}
+Authorization: ApiKey {{rawKey}}
+Cookie:
+
+###############################################
+# 4. OpenAPI docs (§8) — dev-only, non-JSON HTML page
+###############################################
+
+### Swagger UI should respond 200
+GET {{baseUrl}}/api/docs/

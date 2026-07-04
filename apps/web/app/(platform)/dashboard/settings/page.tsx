@@ -10,8 +10,10 @@ import { ApiClientError } from "../../../../lib/api-client";
 import { BrandingTab } from "./_components/branding-tab";
 import { SecurityTab } from "./_components/security-tab";
 import { NotificationsTab } from "./_components/notifications-tab";
+import { ApiKeysTab } from "./_components/api-keys-tab";
+import { RolesTab } from "./_components/roles-tab";
 
-const TABS = ["General", "Branding", "Security", "Notifications"] as const;
+const TABS = ["General", "Branding", "Security", "Notifications", "API Keys", "Roles"] as const;
 type Tab = (typeof TABS)[number];
 
 const STATUS_STYLES: Record<string, string> = {
@@ -119,6 +121,8 @@ export default function SettingsPage() {
       {tab === "Branding" && <BrandingTab />}
       {tab === "Security" && <SecurityTab />}
       {tab === "Notifications" && <NotificationsTab />}
+      {tab === "API Keys" && <ApiKeysTab />}
+      {tab === "Roles" && <RolesTab />}
 
       {tab === "General" && (
         <>

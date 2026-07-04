@@ -51,6 +51,32 @@ export async function verifyAccessToken(token: string): Promise<AccessTokenPaylo
   return payload as unknown as AccessTokenPayload;
 }
 
+// 04-System-Design.md §4.2 / 13-RBAC.md §5 Level 2 — a short-lived, product-scoped
+// launch token. Audience is the product's own slug (not the fixed platform AUDIENCE)
+// so a product can only accept tokens minted for it, matching what
+// platform-sdk's verifyLaunchToken already expects (issuer=platformUrl, audience=productSlug).
+export interface LaunchTokenPayload {
+  userId: string;
+  organizationId: string;
+  orgSlug: string;
+  email: string;
+  permissions: string[];
+}
+
+export async function generateLaunchToken(productSlug: string, payload: LaunchTokenPayload): Promise<string> {
+  const privateKey = await getPrivateKey();
+
+  return new SignJWT({ ...payload })
+    .setProtectedHeader({ alg: "RS256", kid: env.JWT_KEY_ID })
+    .setIssuer(ISSUER)
+    .setAudience(productSlug)
+    .setSubject(payload.userId)
+    .setIssuedAt()
+    .setExpirationTime("60s")
+    .setJti(randomUUID())
+    .sign(privateKey);
+}
+
 export async function getJwks() {
   const publicKey = await getPublicKey();
   const jwk = await exportJWK(publicKey);

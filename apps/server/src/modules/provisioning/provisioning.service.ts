@@ -1,5 +1,6 @@
 import { prisma } from "../../database/prisma.js";
 import { env } from "../../config/env.js";
+import { signPayload } from "../../utils/internalKey.js";
 import type { ProvisionRequest, ProvisionResponse } from "./provisioning.types.js";
 
 // 07-Tenant-Management.md §4.2 — 3 retries, exponential backoff (1m, 5m, 15m).
@@ -13,11 +14,20 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function callProductEndpoint<T>(baseUrl: string, path: string, body: unknown): Promise<T> {
+// 09-Product-Integration.md §4 — every platform -> product call carries an
+// HMAC-signed Platform-Internal-Key header (see utils/internalKey.ts).
+export async function callProductEndpoint<T>(baseUrl: string, path: string, body: unknown): Promise<T> {
+  const bodyStr = JSON.stringify(body);
+  const { signature, timestamp } = signPayload(bodyStr, env.PRODUCT_INTERNAL_SECRET);
+
   const res = await fetch(`${baseUrl}${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
+    headers: {
+      "content-type": "application/json",
+      "platform-internal-key": signature,
+      "platform-internal-timestamp": timestamp,
+    },
+    body: bodyStr,
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 

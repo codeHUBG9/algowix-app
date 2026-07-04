@@ -35,14 +35,24 @@ export const inviteRepository = {
     });
   },
 
+  // 12-Subscriptions.md §4 — POST /subscriptions/:id/seats raises
+  // Subscription.seatCount to buy more seats beyond the plan's default
+  // allotment. Before 12, this read plan.maxSeats only, so buying seats had
+  // no effect on who could be invited. Fixed to take the larger of
+  // seatCount and plan.maxSeats per subscription — never *lower* than the
+  // plan's own cap (every subscription starts at the schema's seatCount
+  // default of 1, which must not shrink an org's existing invite ceiling),
+  // but raised once seats are actually purchased above that.
   maxSeatLimit(organizationId: string) {
     return prisma.subscription
       .findMany({
         where: { organizationId, status: { in: ["TRIALING", "ACTIVE"] } },
-        include: { plan: { select: { maxSeats: true } } },
+        select: { seatCount: true, plan: { select: { maxSeats: true } } },
       })
       .then((subs) => {
-        const limits = subs.map((s) => s.plan.maxSeats).filter((n): n is number => n !== null);
+        const limits = subs
+          .map((s) => (s.plan.maxSeats === null ? null : Math.max(s.seatCount, s.plan.maxSeats)))
+          .filter((n): n is number => n !== null);
         return limits.length > 0 ? Math.max(...limits) : null;
       });
   },
