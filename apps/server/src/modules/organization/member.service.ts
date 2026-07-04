@@ -1,6 +1,7 @@
 import { memberRepository } from "./member.repository.js";
 import { ConflictError, NotFoundError, ValidationError } from "../../utils/errors.js";
 import { invalidateTenantCache } from "../../middleware/tenantContext.js";
+import { webhookService } from "../webhook/webhook.service.js";
 import type { MemberQueryInput, UpdateMemberStatusInput } from "./organization.schema.js";
 import type { LifecycleActor } from "../tenant/tenant.service.js";
 
@@ -157,5 +158,7 @@ export const memberService = {
       ipAddress: actor.ipAddress,
       severity: "WARNING",
     });
+
+    void webhookService.dispatch(organizationId, "user.removed", { userId, email: membership.user.email });
   },
 };

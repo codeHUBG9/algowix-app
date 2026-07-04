@@ -15,8 +15,10 @@ import { settingsController } from "./settings.controller.js";
 import { roleController } from "./role.controller.js";
 import { organizationProfileController } from "./organization-profile.controller.js";
 import { apiKeyController } from "../developer/api-key.controller.js";
+import { fileController } from "../file/file.controller.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 1024 * 1024 } });
+const logoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
 
 export const organizationRouter = Router({ mergeParams: true });
 
@@ -210,4 +212,12 @@ organizationRouter.delete(
   "/:id/api-keys/:keyId",
   requirePermission("api_keys.manage"),
   asyncHandler(apiKeyController.revoke)
+);
+
+// Logo upload shortcut — 16-Files.md §7
+organizationRouter.post(
+  "/:id/logo",
+  requirePermission("organization.update"),
+  logoUpload.single("file"),
+  asyncHandler(fileController.uploadLogo)
 );

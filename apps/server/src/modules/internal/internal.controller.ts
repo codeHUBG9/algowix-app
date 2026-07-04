@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { prisma } from "../../database/prisma.js";
 import { pushNotificationSchema, pushAuditEventSchema } from "./internal.schema.js";
 import { sendSuccess } from "../../utils/respond.js";
+import { notificationService } from "../notification/notification.service.js";
 
 // 09-Product-Integration.md §5 — product -> platform push. Callers are
 // products (identified only by a valid HMAC signature via verifyInternalKey,
@@ -9,15 +10,16 @@ import { sendSuccess } from "../../utils/respond.js";
 export const internalController = {
   async pushNotification(req: Request, res: Response) {
     const input = pushNotificationSchema.parse(req.body);
-    const notification = await prisma.notification.create({
-      data: {
-        organizationId: input.organizationId,
-        userId: input.userId,
-        type: input.type,
-        title: input.title,
-        body: input.body,
-        actionUrl: input.actionUrl,
-      },
+    // Reuses notificationService.notify (14-Notifications.md) so a
+    // product-pushed notification also gets the SSE real-time push and the
+    // same preference-gated email logging any platform-originated one does.
+    const notification = await notificationService.notify({
+      organizationId: input.organizationId,
+      userId: input.userId,
+      type: input.type,
+      title: input.title,
+      body: input.body,
+      actionUrl: input.actionUrl,
     });
     sendSuccess(res, { id: notification.id }, 201);
   },

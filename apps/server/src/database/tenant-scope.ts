@@ -29,6 +29,9 @@ const TENANT_SCOPED_MODELS = new Set([
   "PaymentMethod",
   "Credit",
   "CouponRedemption",
+  "Integration",
+  "MarketplaceInstall",
+  "ApiRequestLog",
 ]);
 
 const READ_AND_BULK_WRITE_OPS = new Set(["findMany", "findFirst", "count", "updateMany", "deleteMany"]);

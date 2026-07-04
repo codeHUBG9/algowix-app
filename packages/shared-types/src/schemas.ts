@@ -233,3 +233,68 @@ export type CancelSubscriptionFormInput = z.infer<typeof cancelSubscriptionSchem
 export type CreateRoleFormInput = z.infer<typeof createRoleSchema>;
 export type UpdateRoleFormInput = z.infer<typeof updateRoleSchema>;
 export type UpdateMemberRoleFormInput = z.infer<typeof updateMemberRoleSchema>;
+
+// ============================================================
+// 14-Notifications.md
+// ============================================================
+
+export const notificationPreferencesSchema = z.object({
+  email: z.object({
+    billing: z.boolean().default(true),
+    team: z.boolean().default(true),
+    product: z.boolean().default(true),
+    digest: z.boolean().default(false),
+    digestTime: z.string().trim().max(5).default("09:00"),
+    digestTimezone: z.string().trim().max(50).default("Asia/Kolkata"),
+  }),
+  push: z.object({
+    enabled: z.boolean().default(true),
+    types: z.array(z.string()).default([]),
+  }),
+});
+
+export type NotificationPreferencesFormInput = z.infer<typeof notificationPreferencesSchema>;
+
+// ============================================================
+// 16-Files.md
+// ============================================================
+
+export const filePresignedUrlSchema = z.object({
+  filename: z.string().trim().min(1, "Filename is required").max(255),
+  mimeType: z.string().trim().min(1, "Mime type is required").max(150),
+  sizeBytes: z.coerce.number().int().positive("File size must be positive"),
+  folder: z.string().trim().max(255).optional().or(z.literal("")),
+});
+
+export type FilePresignedUrlFormInput = z.infer<typeof filePresignedUrlSchema>;
+
+// ============================================================
+// 18-Integrations.md
+// ============================================================
+
+export const createWebhookSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(100),
+  url: z
+    .string()
+    .trim()
+    .url("Enter a valid URL")
+    .max(500)
+    .refine((url) => url.startsWith("https://"), "Webhook URL must use HTTPS"),
+  events: z.array(z.string().trim().min(1)).min(1, "Select at least one event"),
+});
+
+export const updateWebhookSchema = z.object({
+  name: z.string().trim().min(1).max(100).optional(),
+  url: z
+    .string()
+    .trim()
+    .url("Enter a valid URL")
+    .max(500)
+    .refine((url) => url.startsWith("https://"), "Webhook URL must use HTTPS")
+    .optional(),
+  events: z.array(z.string().trim().min(1)).optional(),
+  isActive: z.boolean().optional(),
+});
+
+export type CreateWebhookFormInput = z.infer<typeof createWebhookSchema>;
+export type UpdateWebhookFormInput = z.infer<typeof updateWebhookSchema>;

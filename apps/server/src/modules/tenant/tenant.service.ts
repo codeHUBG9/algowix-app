@@ -3,6 +3,7 @@ import { tenantRepository } from "./tenant.repository.js";
 import { assertTransitionAllowed, type TenantStatus } from "./tenant.lifecycle.js";
 import { invalidateTenantCache } from "../../middleware/tenantContext.js";
 import { provisioningService } from "../provisioning/provisioning.service.js";
+import { webhookService } from "../webhook/webhook.service.js";
 import { ConflictError, NotFoundError } from "../../utils/errors.js";
 import type { UpdateTenantInput } from "./tenant.schema.js";
 
@@ -134,6 +135,8 @@ export const tenantService = {
       after: JSON.stringify(input),
       severity: "INFO",
     });
+
+    void webhookService.dispatch(organizationId, "organization.updated", { organizationId, changes: input });
 
     return updated;
   },

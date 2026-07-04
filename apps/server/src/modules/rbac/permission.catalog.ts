@@ -14,6 +14,11 @@ const CATEGORY_BY_RESOURCE: Record<string, string> = {
   branches: "Branches",
   departments: "Departments",
   teams: "Teams",
+  files: "Files",
+  webhooks: "Webhooks",
+  integrations: "Integrations",
+  reports: "Reports",
+  marketplace: "Marketplace",
 };
 
 const ACTION_LABELS: Record<string, string> = {

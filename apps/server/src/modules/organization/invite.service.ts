@@ -1,6 +1,9 @@
 import { inviteRepository } from "./invite.repository.js";
 import { hashPassword } from "../../services/password.service.js";
 import { authService } from "../auth/auth.service.js";
+import { notificationService } from "../notification/notification.service.js";
+import { NOTIFICATION_TYPES } from "../notification/notification.types.js";
+import { webhookService } from "../webhook/webhook.service.js";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../../utils/errors.js";
 import type { RequestContext } from "../auth/auth.types.js";
 import type { InviteMemberInput, AcceptInviteInput, BulkInviteRow } from "./organization.schema.js";
@@ -58,10 +61,24 @@ export const inviteService = {
       message: input.message || null,
     });
 
-    // TODO: dispatch invite email via notification service (14-Notifications.md)
     console.log(
       `[dev] Org invite for ${input.email} (POST /api/v1/invites/${invite.token}/accept): https://app.algowix.com/accept-invite?token=${invite.token}`
     );
+
+    // 14-Notifications.md §2 team.user_invited — only fires for an existing
+    // account (a brand-new invitee has no user row / notification inbox yet;
+    // they learn about the invite via the accept-invite link above).
+    const existingUser = await inviteRepository.findUserByEmail(input.email);
+    if (existingUser) {
+      await notificationService.notify({
+        organizationId,
+        userId: existingUser.id,
+        type: NOTIFICATION_TYPES.USER_INVITED,
+        title: "You've been invited to an organization",
+        body: `You've been invited to join as ${role.name}.`,
+        actionUrl: "/dashboard",
+      });
+    }
 
     await inviteRepository.writeAuditLog({
       organizationId,
@@ -196,6 +213,19 @@ export const inviteService = {
       action: "invite.accepted",
       resourceId: invite.id,
     });
+
+    if (invite.invitedById) {
+      await notificationService.notify({
+        organizationId: invite.organizationId,
+        userId: invite.invitedById,
+        type: NOTIFICATION_TYPES.USER_JOINED,
+        title: "Invite accepted",
+        body: `${invite.email} has joined ${invite.organization.name}.`,
+        actionUrl: "/dashboard/members",
+      });
+    }
+
+    void webhookService.dispatch(invite.organizationId, "user.created", { userId, email: invite.email });
 
     const tokens = await authService.issueTokensForOrgMember(userId, invite.organizationId, context);
     return { tokens, organization: invite.organization };

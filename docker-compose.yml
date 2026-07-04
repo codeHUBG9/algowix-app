@@ -1,0 +1,49 @@
+# 21-Deployment.md §2 — local development stack. Optional: the documented
+# day-to-day path for this repo uses native SQL Server Express + `pnpm dev`
+# directly on the host (see algowix-platform-progress memory notes); this
+# compose file is for anyone who'd rather run everything containerized.
+# Values below match apps/server/.env.example — copy them into a real
+# .env.local when running against this stack instead of native SQL Server.
+version: "3.9"
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    ports: ["4000:4000"]
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: "sqlserver://db:1433;database=AlgoWix-App;user=sa;password=DevPass123!;trustServerCertificate=true"
+      ALLOWED_ORIGINS: "http://localhost:3000"
+    depends_on:
+      - db
+    volumes:
+      - server_storage:/app/apps/server/storage
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "http://localhost:4000"
+    ports: ["3000:3000"]
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: "http://localhost:4000"
+    depends_on:
+      - server
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    ports: ["1433:1433"]
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "DevPass123!"
+      MSSQL_PID: "Developer"
+    volumes:
+      - mssql_data:/var/opt/mssql
+
+volumes:
+  mssql_data:
+  server_storage:

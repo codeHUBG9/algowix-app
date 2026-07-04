@@ -69,6 +69,9 @@ model Organization {
   paymentMethods PaymentMethod[]
   credits        Credit[]
   couponRedemptions CouponRedemption[]
+  integrations       Integration[]
+  marketplaceInstalls MarketplaceInstall[]
+  apiRequestLogs      ApiRequestLog[]
 
   @@map("Organizations")
   @@schema("platform")
@@ -172,6 +175,7 @@ model User {
   twoFactorMethod  String?   @db.NVarChar(10)
   twoFactorSecret  String?   @db.NVarChar(255)
   backupCodes      String?   @db.NVarChar(Max)
+  notificationPrefs String?  @db.NVarChar(Max)
   status           String    @default("ACTIVE") @db.NVarChar(20)
   loginAttempts    Int       @default(0)
   lockedUntil      DateTime?
@@ -515,6 +519,7 @@ model ApiKey {
   keyHash        String    @unique @db.NVarChar(255)
   keyPrefix      String    @db.NVarChar(20)
   scopes         String    @db.NVarChar(Max)
+  environment    String    @default("live") @db.NVarChar(10)
   lastUsedAt     DateTime?
   expiresAt      DateTime?
   isActive       Boolean   @default(true)
@@ -563,6 +568,97 @@ model WebhookDelivery {
   webhook Webhook @relation(fields: [webhookId], references: [id])
 
   @@map("WebhookDeliveries")
+  @@schema("developer")
+}
+
+// ============================================================
+// INTEGRATIONS & MARKETPLACE — 18-Integrations.md
+// ============================================================
+
+model Integration {
+  id              String    @id @default(uuid()) @db.UniqueIdentifier
+  organizationId  String    @db.UniqueIdentifier
+  provider        String    @db.NVarChar(50)
+  status          String    @default("DISCONNECTED") @db.NVarChar(20)
+  accessTokenEnc  String?   @db.NVarChar(Max)
+  refreshTokenEnc String?   @db.NVarChar(Max)
+  scopes          String?   @db.NVarChar(Max)
+  connectedAt     DateTime?
+  connectedById   String?   @db.UniqueIdentifier
+  metadata        String?   @db.NVarChar(Max)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, provider])
+  @@map("Integrations")
+  @@schema("developer")
+}
+
+// Platform-wide catalog, no organizationId — same shape as Coupon/Product.
+model MarketplaceListing {
+  id             String   @id @default(uuid()) @db.UniqueIdentifier
+  slug           String   @unique @db.NVarChar(100)
+  name           String   @db.NVarChar(150)
+  description    String   @db.NVarChar(1000)
+  developerName  String   @db.NVarChar(150)
+  developerEmail String   @db.NVarChar(255)
+  type           String   @db.NVarChar(30)
+  price          Decimal? @db.Decimal(10, 2)
+  logoUrl        String?  @db.NVarChar(500)
+  screenshots    String?  @db.NVarChar(Max)
+  tags           String?  @db.NVarChar(Max)
+  category       String   @db.NVarChar(50)
+  rating         Decimal  @default(0) @db.Decimal(3, 2)
+  reviewCount    Int      @default(0)
+  installCount   Int      @default(0)
+  status         String   @default("APPROVED") @db.NVarChar(20)
+  webhookEvents  String?  @db.NVarChar(Max)
+  requiredScopes String?  @db.NVarChar(Max)
+  installUrl     String?  @db.NVarChar(500)
+  webhookUrl     String?  @db.NVarChar(500)
+  createdAt      DateTime @default(now())
+
+  installs MarketplaceInstall[]
+
+  @@map("MarketplaceListings")
+  @@schema("developer")
+}
+
+model MarketplaceInstall {
+  id             String    @id @default(uuid()) @db.UniqueIdentifier
+  organizationId String    @db.UniqueIdentifier
+  listingId      String    @db.UniqueIdentifier
+  installedById  String    @db.UniqueIdentifier
+  status         String    @default("ACTIVE") @db.NVarChar(20)
+  installedAt    DateTime  @default(now())
+  uninstalledAt  DateTime?
+
+  organization Organization       @relation(fields: [organizationId], references: [id])
+  listing      MarketplaceListing @relation(fields: [listingId], references: [id])
+
+  @@unique([organizationId, listingId])
+  @@map("MarketplaceInstalls")
+  @@schema("developer")
+}
+
+// 20-Developer-Portal.md §7 — backs GET /developer/usage, /developer/logs,
+// /developer/rate-limits, and per-key usage stats. Logged only for
+// API-key-authenticated requests (see middleware/apiRequestLogger.ts).
+model ApiRequestLog {
+  id             String   @id @default(uuid()) @db.UniqueIdentifier
+  organizationId String   @db.UniqueIdentifier
+  apiKeyId       String?  @db.UniqueIdentifier
+  method         String   @db.NVarChar(10)
+  path           String   @db.NVarChar(255)
+  statusCode     Int
+  latencyMs      Int
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("ApiRequestLogs")
   @@schema("developer")
 }
 

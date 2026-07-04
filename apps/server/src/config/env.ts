@@ -37,6 +37,14 @@ const envSchema = z.object({
   ALGOWIX_STATE: z.string().default("MH"),
   // Invoice PDFs are written to local disk (no Azure Blob in this environment).
   INVOICE_STORAGE_DIR: z.string().default("./storage/invoices"),
+  // 16-Files.md — local-disk stand-in for the doc's Azure Blob containers,
+  // same pattern as INVOICE_STORAGE_DIR above.
+  FILE_STORAGE_DIR: z.string().default("./storage/files"),
+  // 22-Security.md §5 — application-level encryption for OAuth tokens stored
+  // on Integration rows (utils/crypto.ts). A dev default is fine here (no
+  // Azure Key Vault in this environment, same as PLATFORM_ADMIN_KEY etc.) but
+  // must be a real secret, rotated, in any deployed environment.
+  APP_ENCRYPTION_KEY: z.string().default("dev-app-encryption-key-32-bytes!!"),
 });
 
 const parsed = envSchema.safeParse(process.env);

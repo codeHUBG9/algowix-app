@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { updateOrganizationSchema, type UpdateOrganizationFormInput } from "@algowix/shared-types";
 import { useCurrentSession } from "../../../../lib/hooks/use-current-session";
 import { useTenant, useTenantMembers, useUpdateTenant, useCancelTenant } from "../../../../lib/hooks/use-tenant";
+import { useUploadOrgLogo } from "../../../../lib/hooks/use-files";
 import { ApiClientError } from "../../../../lib/api-client";
 import { BrandingTab } from "./_components/branding-tab";
 import { SecurityTab } from "./_components/security-tab";
@@ -31,6 +32,8 @@ export default function SettingsPage() {
   const { data: members } = useTenantMembers();
   const updateTenant = useUpdateTenant();
   const cancelTenant = useCancelTenant();
+  const uploadLogo = useUploadOrgLogo(tenant?.id);
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [tab, setTab] = useState<Tab>("General");
@@ -259,11 +262,44 @@ export default function SettingsPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium">Logo URL</label>
-            <input
-              {...register("logoUrl")}
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
-            />
+            <label className="block text-sm font-medium">Logo</label>
+            <div className="mt-1 flex items-center gap-3">
+              {tenant.logoUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}${tenant.logoUrl}`}
+                  alt=""
+                  className="h-10 w-10 rounded-md border border-slate-200 object-cover"
+                />
+              )}
+              <input
+                {...register("logoUrl")}
+                placeholder="Logo URL, or upload below"
+                className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
+              />
+              {canEdit && (
+                <>
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) uploadLogo.mutate(file);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => logoInputRef.current?.click()}
+                    disabled={uploadLogo.isPending}
+                    className="whitespace-nowrap rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    {uploadLogo.isPending ? "Uploading..." : "Upload"}
+                  </button>
+                </>
+              )}
+            </div>
             {errors.logoUrl && <p className="mt-1 text-xs text-red-600">{errors.logoUrl.message}</p>}
           </div>
         </fieldset>

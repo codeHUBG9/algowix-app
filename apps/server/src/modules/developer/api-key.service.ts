@@ -5,14 +5,13 @@ import { hashToken } from "../../utils/hash-token.js";
 import { NotFoundError } from "../../utils/errors.js";
 import type { CreateApiKeyInput } from "./api-key.schema.js";
 
-const KEY_PREFIX = "awx_live_";
-
 function toPublicApiKey(key: ApiKey) {
   return {
     id: key.id,
     name: key.name,
     keyPrefix: key.keyPrefix,
     scopes: JSON.parse(key.scopes) as string[],
+    environment: key.environment,
     lastUsedAt: key.lastUsedAt,
     expiresAt: key.expiresAt,
     isActive: key.isActive,
@@ -30,15 +29,17 @@ export const apiKeyService = {
   // moment the raw value ever exists outside the caller's clipboard; only
   // the sha256 hash is persisted (10-API-Gateway.md §5).
   async create(organizationId: string, createdById: string, input: CreateApiKeyInput) {
-    const rawKey = `${KEY_PREFIX}${randomBytes(32).toString("hex")}`;
+    const keyPrefixLabel = `awx_${input.environment}_`;
+    const rawKey = `${keyPrefixLabel}${randomBytes(32).toString("hex")}`;
     const keyHash = hashToken(rawKey);
-    const keyPrefix = rawKey.slice(0, KEY_PREFIX.length + 6);
+    const keyPrefix = rawKey.slice(0, keyPrefixLabel.length + 6);
 
     const key = await apiKeyRepository.create(organizationId, {
       name: input.name,
       keyHash,
       keyPrefix,
       scopes: JSON.stringify(input.scopes),
+      environment: input.environment,
       expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
       createdById,
     });

@@ -54,7 +54,12 @@
       "Bash(powershell -NoProfile -Command 'Get-CimInstance Win32_Process -Filter \"Name = '\\\\''node.exe'\\\\''\" | Where-Object { $_.CommandLine -match '\\\\''server\\\\.ts|next.*dev'\\\\'' } | Select-Object ProcessId,CommandLine')",
       "Bash(powershell -NoProfile -Command \"Stop-Process -Id 74412,76260 -Force -ErrorAction SilentlyContinue\")",
       "Bash(curl -s -b /tmp/rbac_cookies.txt http://localhost:4000/api/v1/organizations/__TRACKED_VAR__/roles)",
-      "Bash(powershell -NoProfile -Command \"Stop-Process -Id 32292,71748 -Force -ErrorAction SilentlyContinue\")"
+      "Bash(powershell -NoProfile -Command \"Stop-Process -Id 32292,71748 -Force -ErrorAction SilentlyContinue\")",
+      "Bash(git status *)",
+      "PowerShell(Stop-Process -Id 8896,49204 -Force -Confirm:$false)",
+      "PowerShell(Get-Process -Id 8896,49204 -ErrorAction SilentlyContinue)",
+      "Bash(pnpm --filter @algowix/web add lucide-react)",
+      "Bash(pnpm --filter @algowix/web add recharts)"
     ],
     "additionalDirectories": [
       "D:\\VK-SAAS\\algowix-app\\packages\\platform-sdk\\src"

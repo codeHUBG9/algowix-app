@@ -10,6 +10,8 @@ import type { GatewayWebhookEvent } from "./gateway/payment-gateway.types.js";
 import { assertSubscriptionTransitionAllowed, canSubscriptionTransition } from "../subscription/subscription.lifecycle.js";
 import { provisioningService } from "../provisioning/provisioning.service.js";
 import { ConflictError, NotFoundError, ValidationError } from "../../utils/errors.js";
+import { NOTIFICATION_TYPES } from "../notification/notification.types.js";
+import { webhookService } from "../webhook/webhook.service.js";
 import type { CheckoutInput, InvoiceQueryInput, RefundInvoiceInput } from "./billing.schema.js";
 
 type SubscriptionWithRelations = Subscription & { plan: ProductPlan; product: Product };
@@ -504,12 +506,28 @@ export const billingService = {
       await billingRepository.notify({
         organizationId: invoice.subscription.organizationId,
         userId: owner.id,
-        type: "invoice.paid",
+        type: NOTIFICATION_TYPES.INVOICE_PAID,
         title: "Payment received",
         body: `Invoice ${invoice.invoiceNumber} has been paid.`,
         actionUrl: "/dashboard/billing",
       });
+      if (invoice.subscription.status === "TRIALING") {
+        await billingRepository.notify({
+          organizationId: invoice.subscription.organizationId,
+          userId: owner.id,
+          type: NOTIFICATION_TYPES.SUBSCRIPTION_ACTIVATED,
+          title: "Subscription activated",
+          body: "Your subscription is now active.",
+          actionUrl: "/dashboard/billing",
+        });
+        void webhookService.dispatch(invoice.subscription.organizationId, "subscription.activated", {
+          subscriptionId: invoice.subscriptionId,
+        });
+      }
     }
+
+    void webhookService.dispatch(invoice.subscription.organizationId, "invoice.paid", { invoiceId: invoice.id });
+    void webhookService.dispatch(invoice.subscription.organizationId, "payment.succeeded", { invoiceId: invoice.id });
   },
 
   async handlePaymentFailure(event: GatewayWebhookEvent): Promise<void> {
@@ -543,5 +561,23 @@ export const billingService = {
       resource: "payment",
       resourceId: invoice.id,
     });
+
+    const owner = await billingRepository.findPrimaryOwner(subscription.organizationId);
+    if (owner) {
+      console.log(`[dev] Payment failed email to ${owner.email}: invoice ${invoice.invoiceNumber}`);
+      await billingRepository.notify({
+        organizationId: subscription.organizationId,
+        userId: owner.id,
+        type: NOTIFICATION_TYPES.PAYMENT_FAILED,
+        title: "Payment failed",
+        body: `Payment for invoice ${invoice.invoiceNumber} failed. Please update your payment method.`,
+        actionUrl: "/dashboard/billing",
+      });
+    }
+
+    void webhookService.dispatch(subscription.organizationId, "payment.failed", { invoiceId: invoice.id });
+    if (nextStatus === "PAST_DUE") {
+      void webhookService.dispatch(subscription.organizationId, "subscription.past_due", { subscriptionId: subscription.id });
+    }
   },
 };

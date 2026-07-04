@@ -8,7 +8,11 @@ const AVAILABLE_SCOPES = [
   "organization.read",
   "users.read",
   "subscriptions.read",
+  "billing.read",
   "audit_logs.read",
+  "reports.read",
+  "webhooks.manage",
+  "files.read",
 ] as const;
 
 export function ApiKeysTab() {
@@ -18,6 +22,7 @@ export function ApiKeysTab() {
 
   const [name, setName] = useState("");
   const [scopes, setScopes] = useState<string[]>([]);
+  const [environment, setEnvironment] = useState<"live" | "test">("live");
   const [error, setError] = useState<string | null>(null);
   const [newRawKey, setNewRawKey] = useState<string | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
@@ -33,7 +38,7 @@ export function ApiKeysTab() {
       return;
     }
     try {
-      const key = await createKey.mutateAsync({ name: name.trim(), scopes });
+      const key = await createKey.mutateAsync({ name: name.trim(), scopes, environment });
       setNewRawKey(key.rawKey);
       setName("");
       setScopes([]);
@@ -87,6 +92,17 @@ export function ApiKeysTab() {
               </label>
             ))}
           </div>
+          <div className="flex items-center gap-4 text-xs text-slate-600">
+            <span className="font-medium">Environment</span>
+            <label className="flex items-center gap-1.5">
+              <input type="radio" checked={environment === "live"} onChange={() => setEnvironment("live")} />
+              Live
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input type="radio" checked={environment === "test"} onChange={() => setEnvironment("test")} />
+              Test (sandbox)
+            </label>
+          </div>
           {error && <p className="text-xs text-red-600">{error}</p>}
           <button
             onClick={onCreate}
@@ -109,6 +125,13 @@ export function ApiKeysTab() {
                 <div>
                   <span className="font-medium">{key.name}</span>{" "}
                   <span className="text-slate-400">· {key.keyPrefix}...</span>
+                  <span
+                    className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                      key.environment === "test" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
+                    }`}
+                  >
+                    {key.environment}
+                  </span>
                   {!key.isActive && <span className="ml-2 text-xs text-red-600">Revoked</span>}
                   <p className="text-xs text-slate-400">
                     {key.scopes.join(", ")}

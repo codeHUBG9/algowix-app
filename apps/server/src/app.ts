@@ -3,6 +3,7 @@ import helmet from "helmet";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import morgan from "morgan";
+import path from "node:path";
 import swaggerUi from "swagger-ui-express";
 import { env } from "./config/env.js";
 import { requestId } from "./middleware/requestId.js";
@@ -30,7 +31,23 @@ declare global {
 
 const app = express();
 
-app.use(helmet());
+// 22-Security.md §3.4 — this is an API (not a page-serving app beyond the
+// /public-files static mount and /api/docs Swagger UI), so no nonce-based
+// scriptSrc is wired up; the directives below still lock down defaultSrc,
+// framing, and object embedding for whatever does render HTML here.
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        imgSrc: ["'self'", "data:"],
+        frameSrc: ["'none'"],
+        objectSrc: ["'none'"],
+      },
+    },
+    hsts: { maxAge: 31536000, includeSubDomains: true },
+  })
+);
 app.use(
   cors({
     origin: env.ALLOWED_ORIGINS.split(","),
@@ -56,6 +73,15 @@ app.use(publicRateLimiter);
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", version: "0.1.0" });
 });
+
+// 16-Files.md §4 — public container equivalent (avatars, org logos): served
+// unauthenticated with a long cache lifetime, same as the doc's CDN-backed
+// platform-public container, since browser <img> tags loading cross-origin
+// from apps/web don't send credentials.
+app.use(
+  "/public-files",
+  express.static(path.join(env.FILE_STORAGE_DIR, "public"), { maxAge: "365d", immutable: true })
+);
 
 app.get("/.well-known/jwks.json", async (_req, res, next) => {
   try {

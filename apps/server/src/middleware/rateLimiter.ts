@@ -28,7 +28,7 @@ export const publicRateLimiter = rateLimit({
 
 // 10-API-Gateway.md §3 — per-organization ceiling based on plan tier.
 // Falls back to the IP for the (rare) case this runs before req.auth exists.
-const PLAN_LIMITS: Record<string, number> = {
+export const PLAN_LIMITS: Record<string, number> = {
   STARTER: 60,
   GROWTH: 300,
   BUSINESS: 1000,

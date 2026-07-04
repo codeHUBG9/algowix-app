@@ -33,6 +33,12 @@ const permissions = [
   { resource: "teams", action: "update", scope: "org" },
   { resource: "teams", action: "delete", scope: "org" },
   { resource: "teams", action: "manage_members", scope: "org" },
+  { resource: "files", action: "read", scope: "org" },
+  { resource: "files", action: "manage", scope: "org" },
+  { resource: "webhooks", action: "manage", scope: "org" },
+  { resource: "integrations", action: "manage", scope: "org" },
+  { resource: "reports", action: "read", scope: "org" },
+  { resource: "marketplace", action: "manage", scope: "org" },
 ] as const;
 
 const READ_ONLY_ORG_ACCESS = [
@@ -42,6 +48,8 @@ const READ_ONLY_ORG_ACCESS = [
   "branches.read",
   "departments.read",
   "teams.read",
+  "files.read",
+  "reports.read",
 ];
 
 const systemRoles = [
@@ -204,6 +212,51 @@ async function main() {
       validUntil: new Date("2027-01-01T00:00:00Z"),
     },
   });
+
+  console.log("Seeding marketplace demo listings...");
+  const marketplaceListings = [
+    {
+      slug: "invoice-sync-pro",
+      name: "Invoice Sync Pro",
+      description: "Automatically syncs paid invoices to your accounting software.",
+      developerName: "Ledgerly Labs",
+      developerEmail: "support@ledgerly.dev",
+      type: "FREE",
+      category: "Finance",
+      tags: JSON.stringify(["accounting", "sync"]),
+      rating: 4.6,
+      reviewCount: 128,
+    },
+    {
+      slug: "team-standup-bot",
+      name: "Team Standup Bot",
+      description: "Posts daily standup summaries to your team chat.",
+      developerName: "Standup Labs",
+      developerEmail: "hello@standuplabs.io",
+      type: "PAID_SUBSCRIPTION",
+      price: 499,
+      category: "Communication",
+      tags: JSON.stringify(["slack", "productivity"]),
+      rating: 4.8,
+      reviewCount: 64,
+    },
+    {
+      slug: "usage-analytics-plus",
+      name: "Usage Analytics+",
+      description: "Deeper product usage analytics with cohort breakdowns.",
+      developerName: "AlgoWix Partners",
+      developerEmail: "partners@algowix.com",
+      type: "PAID_FLAT",
+      price: 1999,
+      category: "Analytics",
+      tags: JSON.stringify(["analytics", "reporting"]),
+      rating: 4.3,
+      reviewCount: 41,
+    },
+  ] as const;
+  for (const listing of marketplaceListings) {
+    await prisma.marketplaceListing.upsert({ where: { slug: listing.slug }, update: {}, create: listing });
+  }
 
   console.log("Seed complete.");
 }

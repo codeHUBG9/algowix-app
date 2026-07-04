@@ -6,6 +6,11 @@ import { z } from "zod";
 export const createApiKeySchema = z.object({
   name: z.string().min(1).max(100),
   scopes: z.array(z.string().min(1)).min(1, "At least one scope is required"),
+  // 20-Developer-Portal.md §6 — sandbox environment. "test" keys behave
+  // identically server-side (there's no separate sandbox database in this
+  // environment) — the distinction exists so a developer can tell live vs.
+  // test keys apart at a glance via the awx_test_/awx_live_ prefix.
+  environment: z.enum(["live", "test"]).default("live"),
   expiresAt: z.string().datetime().optional(),
 });
 

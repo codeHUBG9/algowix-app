@@ -1,5 +1,6 @@
 import { prisma } from "../../database/prisma.js";
 import { tenantScopedClient } from "../../database/tenant-scope.js";
+import { notificationService } from "../notification/notification.service.js";
 
 export const billingRepository = {
   findActiveOrTrialingSubscription(organizationId: string, productId: string) {
@@ -268,8 +269,14 @@ export const billingRepository = {
     return membership?.user ?? null;
   },
 
-  notify(data: { organizationId: string; userId: string; type: string; title: string; body: string; actionUrl?: string }) {
-    return prisma.notification.create({
+  // Writes the row directly (rather than going through
+  // notificationService.notify's preference-gated email logging) because
+  // callers here use non-taxonomy type strings for per-threshold idempotency
+  // (e.g. "trial_warning_7") — see hasNotificationOfType below. Still pushes
+  // over SSE so an open dashboard tab sees it immediately, same as any other
+  // notification.
+  async notify(data: { organizationId: string; userId: string; type: string; title: string; body: string; actionUrl?: string }) {
+    const created = await prisma.notification.create({
       data: {
         organizationId: data.organizationId,
         userId: data.userId,
@@ -280,6 +287,17 @@ export const billingRepository = {
         channel: "IN_APP",
       },
     });
+    notificationService.pushRealtime(data.userId, {
+      id: created.id,
+      type: created.type,
+      title: created.title,
+      body: created.body,
+      actionUrl: created.actionUrl,
+      isRead: created.isRead,
+      readAt: created.readAt,
+      createdAt: created.createdAt,
+    });
+    return created;
   },
 
   hasNotificationOfType(organizationId: string, userId: string, type: string) {

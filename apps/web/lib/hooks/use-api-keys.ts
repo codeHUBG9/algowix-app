@@ -9,6 +9,7 @@ export interface ApiKey {
   name: string;
   keyPrefix: string;
   scopes: string[];
+  environment: "live" | "test";
   lastUsedAt: string | null;
   expiresAt: string | null;
   isActive: boolean;
@@ -18,6 +19,7 @@ export interface ApiKey {
 export interface CreateApiKeyInput {
   name: string;
   scopes: string[];
+  environment?: "live" | "test";
   expiresAt?: string;
 }
 

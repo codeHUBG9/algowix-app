@@ -14,6 +14,14 @@ import { subscriptionRouter } from "./modules/subscription/subscription.router.j
 import { subscriptionAdminRouter } from "./modules/subscription/subscription.admin.router.js";
 import { roleRouter } from "./modules/rbac/role.router.js";
 import { permissionRouter } from "./modules/rbac/permission.router.js";
+import { notificationRouter } from "./modules/notification/notification.router.js";
+import { auditRouter } from "./modules/audit/audit.router.js";
+import { fileRouter } from "./modules/file/file.router.js";
+import { reportsRouter } from "./modules/reports/reports.router.js";
+import { webhookRouter } from "./modules/webhook/webhook.router.js";
+import { integrationRouter } from "./modules/integration/integration.router.js";
+import { marketplaceRouter } from "./modules/marketplace/marketplace.router.js";
+import { developerRouter } from "./modules/developer/developer.router.js";
 
 export const apiRouter = Router();
 
@@ -30,6 +38,14 @@ apiRouter.use("/subscriptions", subscriptionRouter);
 apiRouter.use("/admin/subscriptions", subscriptionAdminRouter);
 apiRouter.use("/roles", roleRouter);
 apiRouter.use("/permissions", permissionRouter);
+apiRouter.use("/notifications", notificationRouter);
+apiRouter.use("/audit", auditRouter);
+apiRouter.use("/files", fileRouter);
+apiRouter.use("/reports", reportsRouter);
+apiRouter.use("/webhooks", webhookRouter);
+apiRouter.use("/integrations", integrationRouter);
+apiRouter.use("/marketplace", marketplaceRouter);
+apiRouter.use("/developer", developerRouter);
 
 // Dev/test-only — see internal.dev.router.ts. Never registered in production.
 if (env.NODE_ENV !== "production") {

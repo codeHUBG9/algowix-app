@@ -4,6 +4,7 @@ import { subscriptionRepository } from "./subscription.repository.js";
 import { productRepository } from "../product/product.repository.js";
 import { billingRepository } from "../billing/billing.repository.js";
 import { billingService } from "../billing/billing.service.js";
+import { webhookService } from "../webhook/webhook.service.js";
 import { assertSubscriptionTransitionAllowed, canSubscriptionTransition, type SubscriptionStatus } from "./subscription.lifecycle.js";
 import { ConflictError, NotFoundError, ValidationError } from "../../utils/errors.js";
 import type { CreateSubscriptionInput, UpgradeSubscriptionInput, DowngradeSubscriptionInput, UpdateSeatsInput, CancelSubscriptionInput } from "./subscription.schema.js";
@@ -173,6 +174,12 @@ export const subscriptionService = {
       resourceId: subscription.id,
     });
 
+    void webhookService.dispatch(organization.id, "subscription.created", {
+      subscriptionId: subscription.id,
+      productSlug: product.slug,
+      planSlug: plan.slug,
+    });
+
     return toPublic(subscription);
   },
 
@@ -211,6 +218,8 @@ export const subscriptionService = {
       action: "subscription.cancelled",
       resourceId: id,
     });
+
+    void webhookService.dispatch(organization.id, "subscription.cancelled", { subscriptionId: id });
 
     return subscriptionService.getById(organization.id, id);
   },
