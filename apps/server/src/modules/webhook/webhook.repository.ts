@@ -19,8 +19,15 @@ export const webhookRepository = {
     return tenantScopedClient(organizationId).webhook.update({ where: { id }, data });
   },
 
+  // Webhook has no onDelete: Cascade to WebhookDelivery (found only by
+  // actually deleting a webhook with recorded deliveries — a plain
+  // .delete() 500s with a P2003 foreign key violation), so deliveries are
+  // removed first, in the same transaction.
   delete(organizationId: string, id: string) {
-    return tenantScopedClient(organizationId).webhook.delete({ where: { id } });
+    return prisma.$transaction([
+      prisma.webhookDelivery.deleteMany({ where: { webhookId: id } }),
+      tenantScopedClient(organizationId).webhook.delete({ where: { id } }),
+    ]);
   },
 
   // Active webhooks across ALL orgs subscribed to a given event — used by the

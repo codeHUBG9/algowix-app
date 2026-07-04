@@ -186,6 +186,7 @@ test.describe("RBAC (13-RBAC.md)", () => {
     await page.fill('input[name="email"]', memberEmail);
     await page.selectOption('select[name="roleId"]', { label: "Member" });
     await page.click('button[type="submit"]:has-text("Send invite")');
+    await expect(page.getByText(memberEmail)).toBeVisible();
 
     const token = await getInviteToken(request, memberEmail);
     const acceptRes = await request.post(`${API_URL}/api/v1/invites/${token}/accept`, {

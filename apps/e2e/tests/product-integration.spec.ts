@@ -8,7 +8,7 @@ test.describe("Product Integration (09-Product-Integration.md)", () => {
     await registerViaUi(page, { email: uniqueEmail("product-int"), organizationName: "Product Integration Org" });
     await page.goto("/dashboard/products");
 
-    await expect(page.getByText("CRM")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "CRM" })).toBeVisible();
     await expect(page.getByText("TRIALING")).toBeVisible();
 
     await page.click('button:has-text("View plans")');
